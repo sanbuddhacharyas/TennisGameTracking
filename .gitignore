@@ -1,0 +1,12 @@
+*.jpg
+*.png
+*.txt
+*.mp4
+*.pth
+*.log
+*.gif
+*.h5
+*.csv
+*.avi
+*.mkv
+weights/
