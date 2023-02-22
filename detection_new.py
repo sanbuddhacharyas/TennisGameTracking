@@ -73,7 +73,7 @@ def get_stroke_predictions(video_path, stroke_recognition, strokes_frames, playe
     return predictions
 
 
-def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleton_df, verbose=0):
+def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleton_df,verbose=0):
     """
     Detect strokes frames using location of the ball and players
     """
@@ -120,12 +120,16 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleto
     coordinates = ball_f2_y(xnew)
     # Find all peaks of the ball y index
     peaks, _ = find_peaks(coordinates)
+    # peaks = list(set(list(peaks) + list(bounces_indices)))
+
     if verbose:
         plt.plot(coordinates)
         plt.plot(peaks, coordinates[peaks], "x")
         plt.show()
 
+    
     neg_peaks, _ = find_peaks(coordinates * -1)
+    # neg_peaks = list(set(list(neg_peaks) + list(bounces_indices)))
     if verbose:
         plt.plot(coordinates)
         plt.plot(neg_peaks, coordinates[neg_peaks], "x")
@@ -135,10 +139,11 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleto
     left_wrist_index = 9
     right_wrist_index = 10
     skeleton_df = skeleton_df.fillna(-1)
-    left_wrist_pos = skeleton_df.iloc[:, [left_wrist_index, left_wrist_index + 15]].values
+    left_wrist_pos  = skeleton_df.iloc[:, [left_wrist_index, left_wrist_index + 15]].values
     right_wrist_pos = skeleton_df.iloc[:, [right_wrist_index, right_wrist_index + 15]].values
 
     dists = []
+
     # Calculate dist between ball and bottom player
     for i, player_box in enumerate(player_1_boxes):
         if player_box[0] is not None:
@@ -146,13 +151,21 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleto
             ball_pos = np.array([ball_f2_x(i), ball_f2_y(i)])
             box_dist = np.linalg.norm(player_center - ball_pos)
             right_wrist_dist, left_wrist_dist = np.inf, np.inf
-            if right_wrist_pos[i, 0] > 0:
-                right_wrist_dist = np.linalg.norm(right_wrist_pos[i, :] - ball_pos)
-            if left_wrist_pos[i, 0] > 0:
-                left_wrist_dist = np.linalg.norm(left_wrist_pos[i, :] - ball_pos)
-            dists.append(min(box_dist, right_wrist_dist, left_wrist_dist))
+
+           
+            try:
+                if right_wrist_pos[i, 0] > 0:
+                    right_wrist_dist = np.linalg.norm(right_wrist_pos[i, :] - ball_pos)
+                if left_wrist_pos[i, 0] > 0:
+                    left_wrist_dist = np.linalg.norm(left_wrist_pos[i, :] - ball_pos)
+                dists.append(min(box_dist, right_wrist_dist, left_wrist_dist))
+            
+            except:
+                dists.append(None)
+
         else:
             dists.append(None)
+
     dists = np.array(dists)
 
     dists2 = []
@@ -168,14 +181,17 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleto
     # Find stroke for bottom player by thresholding the dists
     for peak in peaks:
         player_box_height = max(player_1_boxes[peak][3] - player_1_boxes[peak][1], 130)
-        if dists[peak] < (player_box_height * 4 / 5):
-            strokes_1_indices.append(peak)
+
+        if dists[peak] != None:
+            if dists[peak] < (player_box_height * 4 / 5):
+                strokes_1_indices.append(peak)
 
     strokes_2_indices = []
     # Find stroke for top player by thresholding the dists
     for peak in neg_peaks:
-        if dists2[peak] < 100:
-            strokes_2_indices.append(peak)
+        if dists2[peak] != None:
+            if dists2[peak] < 100:
+                strokes_2_indices.append(peak)
 
     # Assert the diff between to consecutive strokes is below some threshold
     while True:
@@ -204,7 +220,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleto
             break
 
     # Assume bounces frames are all the other peaks in the y index graph
-    bounces_indices = [x for x in peaks if x not in strokes_1_indices]
+    # bounces_indices = [x for x in peaks if x not in strokes_1_indices]
     if verbose:
         plt.figure()
         plt.plot(coordinates)
@@ -213,7 +229,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, skeleto
         plt.legend(['data', 'player 1 strokes', 'player 2 strokes'], loc='best')
         plt.show()
 
-    return strokes_1_indices, strokes_2_indices, bounces_indices, player_2_f_x, player_2_f_y
+    return strokes_1_indices, strokes_2_indices, player_2_f_x, player_2_f_y
 
 
 def mark_player_box(frame, boxes, frame_num):
@@ -232,22 +248,28 @@ def mark_skeleton(skeleton_df, img, img_no_frame, frame_number):
     stickman_pairs = get_stickman_line_connection()
 
     skeleton_df = skeleton_df.fillna(-1)
-    values = np.array(skeleton_df.values[frame_number], int)
-    points = list(zip(values[5:17], values[22:]))
-    # draw key points
-    for point in points:
-        if point[0] >= 0 and point[1] >= 0:
-            xy = tuple(np.array([point[0], point[1]], int))
-            cv2.circle(img, xy, 2, circle_color, 2)
-            cv2.circle(img_no_frame, xy, 2, circle_color, 2)
 
-    # Draw stickman
-    for pair in stickman_pairs:
-        partA = pair[0] - 5
-        partB = pair[1] - 5
-        if points[partA][0] >= 0 and points[partA][1] >= 0 and points[partB][0] >= 0 and points[partB][1] >= 0:
-            cv2.line(img, points[partA], points[partB], line_color, 1, lineType=cv2.LINE_AA)
-            cv2.line(img_no_frame, points[partA], points[partB], line_color, 1, lineType=cv2.LINE_AA)
+    try:
+        values = np.array(skeleton_df.values[frame_number], int)
+        points = list(zip(values[5:17], values[22:]))
+        # draw key points
+        for point in points:
+            if point[0] >= 0 and point[1] >= 0:
+                xy = tuple(np.array([point[0], point[1]], int))
+                cv2.circle(img, xy, 2, circle_color, 2)
+                cv2.circle(img_no_frame, xy, 2, circle_color, 2)
+
+        # Draw stickman
+        for pair in stickman_pairs:
+            partA = pair[0] - 5
+            partB = pair[1] - 5
+            if points[partA][0] >= 0 and points[partA][1] >= 0 and points[partB][0] >= 0 and points[partB][1] >= 0:
+                cv2.line(img, points[partA], points[partB], line_color, 1, lineType=cv2.LINE_AA)
+                cv2.line(img_no_frame, points[partA], points[partB], line_color, 1, lineType=cv2.LINE_AA)
+
+    except:
+        pass
+
     return img, img_no_frame
 
 
@@ -285,7 +307,7 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
     final_width = width * 2 if with_frame == 2 else width
 
     # Video writer
-    out = cv2.VideoWriter(os.path.join(output_folder, output_file + '.avi'),
+    out = cv2.VideoWriter(os.path.join(output_folder, output_file + '.mp4'),
                           cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (final_width, height))
 
     # initialize frame counters
@@ -315,8 +337,8 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
         img_no_frame = mark_player_box(img_no_frame, player2_boxes, frame_number)
 
         # add ball location
-        img = ball_detector.mark_positions(img, frame_num=frame_number)
-        img_no_frame = ball_detector.mark_positions(img_no_frame, frame_num=frame_number, ball_color='black')
+        # img = ball_detector.mark_positions(img, frame_num=frame_number)
+        # img_no_frame = ball_detector.mark_positions(img_no_frame, frame_num=frame_number, ball_color='black')
 
         # add pose stickman
         if skeleton_df is not None:
@@ -332,10 +354,10 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
                     'stroke']
                 cv2.putText(img, 'Forehand - {:.2f}, Backhand - {:.2f}, Service - {:.2f}'.format(*probs),
                             (70, 400),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                 cv2.putText(img, f'Stroke : {stroke}',
                             (int(player1_boxes[frame_number][0]) - 10, int(player1_boxes[frame_number][1]) - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
                 break
         # Add stroke detected
@@ -489,7 +511,8 @@ def create_top_view(court_detector, detection_model, coords, fps, tennis_trackin
         out.write(frame)
     out.release()
 
-    return tennis_tracking
+    coords = np.array([[i[0], i[1]] for i in coords])
+    return tennis_tracking, coords
 
 def find_bouning_point(blank_img, corrected_ball_position, bounced_model, point_detection_model):
     temp_img = blank_img.copy()
@@ -539,22 +562,89 @@ def fit_polynomial(x, y, reg, poly_features):
     
     return y_pred, reg, poly_features
 
+
+def fit_polynomial_trajectory(ball_possition, reg, poly_features):
+
+    temp_x         = []
+    temp_y         = []
+
+    prev_temp_x    = []
+    prev_temp_y    = []
+    prev_y_pred    = []
+
+    prev_curve_x   = []
+    prev_y_curv    = []
+
+    
+    for (x, y) in ball_possition:
+        
+        print(x, y)
+        prev_flag = False
+
+        if len(temp_x) < 3:
+            temp_x.append(x)
+            temp_y.append(y)
+
+        else:
+            temp_x.append(x)
+            temp_y.append(y)
+
+            y_pred, reg, poly_features = fit_polynomial(temp_x, temp_y, reg, poly_features)
+
+            y_truth        = np.array(temp_y)
+            error          = l2_loss(y_pred, y_truth)
+
+            if error > 20:
+                if len(prev_temp_x) >= 1:
+                    temp_x     = [prev_temp_x[-1], x]
+                    temp_y     = [prev_temp_y[-1], y]
+
+                else:
+                    temp_x     = [x]
+                    temp_y     = [y]
+
+                prev_flag = True
+
+            else:
+                prev_temp_x = temp_x.copy()
+                prev_temp_y = temp_y.copy()
+                prev_y_pred = list(y_pred).copy()
+
+        if (prev_curve_x != []) and not(prev_flag):
+
+            if len(prev_temp_x)==4:
+                prev_curve_x      = prev_curve_x + prev_temp_x[1:]
+                # prev_curve_y      = prev_curve_y + prev_temp_y[1:]
+                prev_y_curv       = prev_y_curv  + prev_y_pred[1:]
+
+            else:
+                prev_curve_x      = prev_curve_x + [prev_temp_x[-1]]
+                # prev_curve_y      = prev_curve_y + [prev_temp_y[-1]]
+                prev_y_curv       = prev_y_curv  + [prev_y_pred[-1]]
+
+
+        else:
+            prev_curve_x      = prev_temp_x.copy()
+            # prev_curve_y      = prev_temp_y.copy()
+            prev_y_curv       = prev_y_pred.copy()  
+    
+    print(prev_curve_x, prev_y_curv)
+    return [(int(x), int(y)) for x, y in zip(prev_curve_x, prev_y_curv)]
+
+
 def l2_loss(y_pred, y_truth):
     return np.mean((y_pred - y_truth)**2)
 
 
-def draw_output(q, draw, bounce_i, draw_bouncing, color):
-
-    for i in range(q.shape[0]):
-        if q[i, 0] is not None:
-            draw_x = q[i, 0]
-            draw_y = q[i, 1]
-            bbox = (draw_x - 5, draw_y - 5, draw_x + 5, draw_y + 5)
+def draw_output(draw, draw_points, draw_bouncing, color):
+    
+    draw_x = draw_points[0]
+    draw_y = draw_points[1]
+    bbox   = (draw_x - 5, draw_y - 5, draw_x + 5, draw_y + 5)
             
-            if bounce_i is not None and i == bounce_i:
-                draw.ellipse(bbox, outline=color, fill=color)
-                draw_bouncing.append(bbox)
-            
+    draw.ellipse(bbox, outline=color, fill=color)
+    draw_bouncing.append(bbox)
+        
 
     return draw, draw_bouncing
 
@@ -574,32 +664,40 @@ def draw_line(q, draw):
 
 
 def mark_positions(frame, coordiantes, draw_bouncing, draw_stroke, bounce_index=None, stroke_index=None, mark_num=14, frame_num=None, ball_color='yellow'):
-    
-    # if frame number is not given, use the last positions found
-    stroke_i, bounce_i = None, None
-
-    if frame_num is not None:
-        q = coordiantes[frame_num-mark_num+1:frame_num+1, :]
-
-        for i in range(frame_num - mark_num + 1, frame_num + 1):
-            if i in bounce_index:
-                bounce_i = i - frame_num + mark_num - 1
-                break
-
-        for i in range(frame_num - mark_num + 1, frame_num + 1):
-            if i in stroke_index:
-                stroke_i = i - frame_num + mark_num - 1
-                break
-    
-    else:
-        q = coordiantes[-mark_num:, :]
 
     pil_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(pil_image)
 
-
-    # Mark each position by a circle
     draw = ImageDraw.Draw(pil_image)
+   
+    if frame_num in bounce_index:
+        draw_point = coordiantes[frame_num]
+        print("draw_point", draw_point, "frame_num", frame_num)
+
+        if draw_point[0] == None:
+            if coordiantes[frame_num + 1][0] != None:
+                draw_point = coordiantes[frame_num + 1]
+
+
+            elif coordiantes[frame_num - 1][0] != None:
+                draw_point = coordiantes[frame_num - 1]
+
+        draw, draw_bouncing       = draw_output(draw, draw_point, draw_bouncing , color = 'red')
+
+    if frame_num in stroke_index:
+        draw_point = coordiantes[frame_num]
+        print("draw_point", draw_point, "frame_num", frame_num)
+
+        if draw_point[0] == None:
+            if coordiantes[frame_num + 1][0] != None:
+                print("frame+1", draw_point)
+                draw_point = coordiantes[frame_num + 1]
+
+            elif coordiantes[frame_num - 1][0] != None:
+                draw_point = coordiantes[frame_num - 1]
+                print("frame-1", draw_point)
+
+        draw, draw_stroke       = draw_output(draw, draw_point , draw_stroke, color = 'blue')
 
 
     for bounce_box in draw_bouncing:
@@ -607,12 +705,6 @@ def mark_positions(frame, coordiantes, draw_bouncing, draw_stroke, bounce_index=
     
     for stroke_box in draw_stroke:
         draw.ellipse(stroke_box, outline='blue', fill='blue')
-
-    if bounce_i != None:
-        draw, draw_bouncing = draw_output(q, draw, bounce_i, draw_bouncing, color = 'red')
-    
-    if stroke_i != None:
-        draw, draw_stroke   = draw_output(q, draw, stroke_i, draw_stroke, color = 'blue')
     
         # Convert PIL image format back to opencv image format
     frame = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
@@ -625,6 +717,9 @@ def ball_trajectory_and_bouncing(vid_path, raw_coordinates, blank_img, bounced_m
     q = queue.deque()
     for i in range(0, queuelength):
         q.appendleft({'data':None, 'frame_id':None})
+
+    # poly_features  = PolynomialFeatures(degree=4, include_bias=False)
+    # reg            = LinearRegression()
 
     all_bouncing  = []
     frame_num     = 0
@@ -750,8 +845,11 @@ def ball_trajectory_and_bouncing(vid_path, raw_coordinates, blank_img, bounced_m
 
                     frames.append(int(q[i]['frame_id']))
                     ball_all.append((int(draw_x), int(draw_y)))
+
+            
             
             if len(ball_all)>4:
+                # ball_all = fit_polynomial_trajectory(ball_all, reg, poly_features)
                 x, y      = find_bouning_point(blank_img, ball_all, bounced_model, point_detection_model)
                     
                 if x!=None:
@@ -788,45 +886,7 @@ def ball_trajectory_and_bouncing(vid_path, raw_coordinates, blank_img, bounced_m
     return all_bouncing
 
 
-# def find_all_bounding(ball_coordinate, blank_img, bounced_model, point_detection_model, mark_num=10):
 
-#     bouncing_points = []
-#     all_bouncing    = []
-#     all_ball_corrdinate = [{'data':pos, 'frameid':ind} for ind, pos in enumerate(ball_coordinate)]
-
-#     for frame_num in range(len(all_ball_corrdinate)):
-       
-        
-#         q = all_ball_corrdinate[frame_num-mark_num+1:frame_num+1]
-          
-       
-#         ball_all = []
-#         frames   = []
-        
-#         for i in range(len(q)):
-#             if q[i]['data'][0] is not None:
-#                 draw_x = q[i]['data'][0]
-#                 draw_y = q[i]['data'][1]
-
-#                 frames.append(int(q[i]['frameid']))
-#                 ball_all.append((int(draw_x), int(draw_y)))
-
-#         if len(ball_all) > 4:
-           
-#             x, y      = find_bouning_point(blank_img, ball_all, bounced_model, point_detection_model)
-            
-#             if x!=None:
-                
-#                 distance  = np.array([np.sqrt((x_f - x)**2 + (y_f - y)**2) for x_f, y_f in ball_all])
-#                 min_index = np.argmin(distance)
-                
-#                 bouncing_points.append(frames[min_index])
-        
-
-#     # Filter noises from real bouncing
-#     bouncing_points = [item for item in list(set(bouncing_points)) if bouncing_points.count(item)>2]
-
-#     return bouncing_points
     
 def make_video(video_path, bouncing_points, stroke_points, ball_detector):
     video = cv2.VideoCapture(video_path)
@@ -896,10 +956,6 @@ def store_contact_points(tennis_tracking, bounce_index, stroke_index_p1, stroke_
        
     return tennis_tracking
         
-        
-
-
-
 
 def video_process(video_path, show_video=False, include_video=True,
                   stickman=True, stickman_box=True, court=True,
@@ -909,10 +965,10 @@ def video_process(video_path, show_video=False, include_video=True,
     dtype = get_dtype()
 
     # initialize extractors
-    # court_detector  = CourtDetector()
-    # detection_model = DetectionModel(dtype=dtype)
-    # pose_extractor  = PoseExtractor(person_num=1, box=stickman_box, dtype=dtype) if stickman else None
-    # stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
+    court_detector  = CourtDetector()
+    detection_model = DetectionModel(dtype=dtype)
+    pose_extractor  = PoseExtractor(person_num=1, box=stickman_box, dtype=dtype) if stickman else None
+    stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
     ball_detector = BallDetector('./weights/model.3', out_channels=2)
 
     tennis_tracking = pd.DataFrame(columns=["Time", "Frame", "Player_1", "Player_2", "Ball_POS", "Ball_bounced", "Stroked_Player", "Stroke_Type"])
@@ -947,21 +1003,21 @@ def video_process(video_path, show_video=False, include_video=True,
         frame_i += 1
 
         if ret:
-            # if frame_i == 1:
-            #     court_detector.detect(frame)
-            #     print(f'Court detection {"Success" if court_detector.success_flag else "Failed"}')
-            #     print(f'Time to detect court :  {time.time() - start_time} seconds')
-            #     start_time = time.time()
+            if frame_i == 1:
+                court_detector.detect(frame)
+                print(f'Court detection {"Success" if court_detector.success_flag else "Failed"}')
+                print(f'Time to detect court :  {time.time() - start_time} seconds')
+                start_time = time.time()
 
-            # court_detector.track_court(frame)
+            court_detector.track_court(frame)
 
-            # # detect
-            # detection_model.detect_player_1(frame.copy(), court_detector)
-            # detection_model.detect_top_persons(frame, court_detector, frame_i)
+            # detect
+            detection_model.detect_player_1(frame.copy(), court_detector)
+            detection_model.detect_top_persons(frame, court_detector, frame_i)
 
-            # # Create stick man figure (pose detection)
-            # if stickman:
-            #     pose_extractor.extract_pose(frame, detection_model.player_1_boxes)
+            # Create stick man figure (pose detection)
+            if stickman:
+                pose_extractor.extract_pose(frame, detection_model.player_1_boxes)
 
             ball_detector.detect_ball(frame)
 
@@ -976,7 +1032,7 @@ def video_process(video_path, show_video=False, include_video=True,
         else:
             break
 
-    # detection_model.find_player_2_box()
+    detection_model.find_player_2_box()
 
     corrds = []
     for i in ball_detector.xy_coordinates:
@@ -988,59 +1044,64 @@ def video_process(video_path, show_video=False, include_video=True,
 
 
     # if top_view:
-    # tennis_tracking = create_top_view(court_detector, detection_model, corrds, fps, tennis_tracking)
+    tennis_tracking, coords = create_top_view(court_detector, detection_model, corrds, fps, tennis_tracking)
 
-    # # Save landmarks in csv files
-    # df = None
-    # # # Save stickman data
-    # if stickman:
-    #     df = pose_extractor.save_to_csv(output_folder)
+    # Save landmarks in csv files
+    df = None
+    # # Save stickman data
+    if stickman:
+        df = pose_extractor.save_to_csv(output_folder)
 
-    # # smooth the output data for better results
-    # df_smooth = None
-    # if smoothing:
-    #     smoother = Smooth()
-    #     df_smooth = smoother.smooth(df)
-    #     smoother.save_to_csv(output_folder)
-
-
-    # player_1_strokes_indices, player_2_strokes_indices, bounces_indices, f2_x, f2_y = find_strokes_indices(
-    #     detection_model.player_1_boxes,
-    #     detection_model.player_2_boxes,
-    #     ball_detector.xy_coordinates,
-    #     df_smooth)
+    # smooth the output data for better results
+    df_smooth = None
+    if smoothing:
+        smoother = Smooth()
+        df_smooth = smoother.smooth(df)
+        smoother.save_to_csv(output_folder)
 
     bounces_indices     = ball_trajectory_and_bouncing(video_path, ball_detector.xy_coordinates, blank_img, bounced_model, point_detection_model)
-    bouncing_points     = [item for item in list(set(bounces_indices)) if bounces_indices.count(item)>2]
+    
 
-    # stroke_indices      = list(player_1_strokes_indices) + list(player_2_strokes_indices)
-    # temp_player_indices = stroke_indices + list(np.array(stroke_indices) - 2) + list(np.array(stroke_indices) - 1) + list(np.array(stroke_indices) + 2) + list(np.array(stroke_indices) + 1)
 
-    # bounces_indices    = list(set(bounces_indices) - set(temp_player_indices))
+    player_1_strokes_indices, player_2_strokes_indices, f2_x, f2_y = find_strokes_indices(
+        detection_model.player_1_boxes,
+        detection_model.player_2_boxes,
+        coords,
+        df_smooth)
+
+    stroke_indices      = list(player_1_strokes_indices) + list(player_2_strokes_indices)
+    temp_player_indices = stroke_indices + list(np.array(stroke_indices) - 2) + list(np.array(stroke_indices) - 1) + list(np.array(stroke_indices) + 2) + list(np.array(stroke_indices) + 1)
+
+    bounces_indices    = [item for item in list(set(bounces_indices)) if bounces_indices.count(item)>2]
+    bounces_indices    = list(set(bounces_indices) - set(temp_player_indices))
 
 
     # '''ball_detector.bounces_indices = bounces_indices
     # ball_detector.coordinates = (f2_x, f2_y)'''
-    # predictions = get_stroke_predictions(video_path, stroke_recognition,
-                                        #  player_1_strokes_indices, detection_model.player_1_boxes)
+    predictions = get_stroke_predictions(video_path, stroke_recognition,
+                                         player_1_strokes_indices, detection_model.player_1_boxes)
 
-    # tennis_tracking = store_contact_points(tennis_tracking, bounces_indices, player_1_strokes_indices, player_2_strokes_indices, predictions)
-    make_video('./videos/ball_trajectory.mp4', bouncing_points, [], ball_detector)
+    print("player_1_strokes_indices", player_1_strokes_indices)
+    print("player_2_strokes_indices", player_2_strokes_indices)
+    print("stroke_indices", stroke_indices)
+
+    tennis_tracking = store_contact_points(tennis_tracking, bounces_indices, player_1_strokes_indices, player_2_strokes_indices, predictions)
+    make_video('./videos/ball_trajectory.mp4', bounces_indices, stroke_indices, ball_detector)
     
     tennis_tracking.to_csv('statistics.csv', index = False)
 
     # print(predictions)
 
-    # statistics = Statistics(court_detector, detection_model)
-    # heatmap = statistics.get_player_position_heatmap()
-    # statistics.display_heatmap(heatmap, court_detector.court_reference.court, title='Heatmap')
-    # statistics.get_players_dists()
+    statistics = Statistics(court_detector, detection_model)
+    heatmap = statistics.get_player_position_heatmap()
+    statistics.display_heatmap(heatmap, court_detector.court_reference.court, title='Heatmap')
+    statistics.get_players_dists()
 
-    # add_data_to_video(input_video=video_path, court_detector=court_detector, players_detector=detection_model,
-    #                   ball_detector=ball_detector, strokes_predictions=predictions, skeleton_df=df_smooth,
-    #                   statistics=statistics,
-    #                   show_video=show_video, with_frame=1, output_folder=output_folder, output_file=output_file,
-    #                   p1=player_1_strokes_indices, p2=player_2_strokes_indices, f_x=f2_x, f_y=f2_y)
+    add_data_to_video(input_video='./output.mp4', court_detector=court_detector, players_detector=detection_model,
+                      ball_detector=ball_detector, strokes_predictions=predictions, skeleton_df=df_smooth,
+                      statistics=statistics,
+                      show_video=show_video, with_frame=1, output_folder=output_folder, output_file=output_file,
+                      p1=player_1_strokes_indices, p2=player_2_strokes_indices, f_x=f2_x, f_y=f2_y)
 
     # # ball_detector.show_y_graph(detection_model.player_1_boxes, detection_model.player_2_boxes)
 
