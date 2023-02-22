@@ -254,7 +254,7 @@ class CourtDetector:
 
                     k += 1
 
-        if True:
+        if self.verbose:
             frame = self.frame.copy()
             court = self.add_court_overlay(frame, max_mat, (255, 0, 0))
             cv2.imshow('court', court)
