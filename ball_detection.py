@@ -61,7 +61,7 @@ class BallDetector:
         modelFN = Models.TrackNet.TrackNet
         self.detector = modelFN( self.n_classes , input_height=self.model_input_height, input_width=self.model_input_width   )
         self.detector.compile(loss='categorical_crossentropy', optimizer= 'adadelta' , metrics=['accuracy'])
-        self.detector.load_weights(  save_weights_path  )
+        self.detector.load_weights(save_weights_path)
 
         self.current_frame = None
         self.last_frame = None
@@ -144,11 +144,11 @@ class BallDetector:
 
             x, y = self.keypoint_to_heatmap(heatmap)
 
-            if x is not None:
-                # Check distance from previous location and remove outliers
-                if self.xy_coordinates[-1][0] is not None:
-                    if np.linalg.norm(np.array([x,y]) - self.xy_coordinates[-1]) > self.threshold_dist:
-                        x, y = None, None
+            # if x is not None:
+            #     # Check distance from previous location and remove outliers
+            #     if self.xy_coordinates[-1][0] is not None:
+            #         if np.linalg.norm(np.array([x,y]) - self.xy_coordinates[-1]) > self.threshold_dist:
+            #             x, y = None, None
 
             self.xy_coordinates = np.append(self.xy_coordinates, np.array([[x, y]]), axis=0)
 
