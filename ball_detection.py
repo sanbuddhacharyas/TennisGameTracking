@@ -71,7 +71,7 @@ class BallDetector:
         self.video_height = None
         
 
-        self.threshold_dist = 100
+        self.threshold_dist = 50
         self.xy_coordinates = np.array([[None, None], [None, None]])
 
         self.bounces_indices = []
@@ -144,11 +144,11 @@ class BallDetector:
 
             x, y = self.keypoint_to_heatmap(heatmap)
 
-            # if x is not None:
-            #     # Check distance from previous location and remove outliers
-            #     if self.xy_coordinates[-1][0] is not None:
-            #         if np.linalg.norm(np.array([x,y]) - self.xy_coordinates[-1]) > self.threshold_dist:
-            #             x, y = None, None
+            if x is not None:
+                # Check distance from previous location and remove outliers
+                if self.xy_coordinates[-1][0] is not None:
+                    if np.linalg.norm(np.array([x,y]) - self.xy_coordinates[-1]) > self.threshold_dist:
+                        x, y = None, None
 
             self.xy_coordinates = np.append(self.xy_coordinates, np.array([[x, y]]), axis=0)
 
