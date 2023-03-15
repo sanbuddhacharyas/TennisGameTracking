@@ -54,20 +54,26 @@ class CourtDetector:
         # Filter pixel using the court known structure
         filtered = self._filter_pixels(self.gray)
 
-        # Detect lines using Hough transform
-        horizontal_lines, vertical_lines = self._detect_lines(filtered)
+        try:
+            # Detect lines using Hough transform
+            horizontal_lines, vertical_lines = self._detect_lines(filtered)
 
-        # Find transformation from reference court to frame`s court
-        court_warp_matrix, game_warp_matrix, self.court_score = self._find_homography(horizontal_lines,
-                                                                                      vertical_lines)
-        self.court_warp_matrix.append(court_warp_matrix)
-        self.game_warp_matrix.append(game_warp_matrix)
-        court_accuracy = self._get_court_accuracy(0)
-        if court_accuracy > self.success_accuracy and self.court_score > self.success_score:
-            self.success_flag = True
-        print('Court accuracy = %.2f' % court_accuracy)
-        # Find important lines location on frame
-        self.find_lines_location()
+            # Find transformation from reference court to frame`s court
+            court_warp_matrix, game_warp_matrix, self.court_score = self._find_homography(horizontal_lines, vertical_lines)
+
+            self.court_warp_matrix.append(court_warp_matrix)
+            self.game_warp_matrix.append(game_warp_matrix)
+            court_accuracy = self._get_court_accuracy(0)
+            if court_accuracy > self.success_accuracy and self.court_score > self.success_score:
+                self.success_flag = True
+            # print('Court accuracy = %.2f' % court_accuracy)
+            # Find important lines location on frame
+            self.find_lines_location()
+
+            return True, court_accuracy
+
+        except:
+            return False, None
         '''game_warped = cv2.warpPerspective(self.frame, self.game_warp_matrix,
                                           (self.court_reference.court.shape[1], self.court_reference.court.shape[0]))
         cv2.imwrite('../report/warped_game_1.png', game_warped)'''
@@ -109,6 +115,9 @@ class CourtDetector:
         lines = np.squeeze(lines)
         if self.verbose:
             display_lines_on_frame(self.frame.copy(), [], lines)
+
+        if lines.shape == ():
+            return [], []
 
         # Classify the lines using their slope
         horizontal, vertical = self._classify_lines(lines)
@@ -254,15 +263,9 @@ class CourtDetector:
 
                     k += 1
 
-        if self.verbose:
-            frame = self.frame.copy()
-            court = self.add_court_overlay(frame, max_mat, (255, 0, 0))
-            cv2.imshow('court', court)
-            if cv2.waitKey(0) & 0xff == 27:
-                cv2.destroyAllWindows()
 
-        print(f'Score = {max_score}')
-        print(f'Combinations tested = {k}')
+        # print(f'Score = {max_score}')
+        # print(f'Combinations tested = {k}')
 
         return max_mat, max_inv_mat, max_score
 

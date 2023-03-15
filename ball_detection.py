@@ -5,13 +5,10 @@ from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 from scipy import signal
 from scipy.signal import find_peaks
-import Models
 
 from ball_tracker_net import BallTrackerNet
 from detection import center_of_box
 from utils import get_video_properties
-
-import imutils
 
 
 def combine_three_frames(frame1, frame2, frame3, width, height):
@@ -39,29 +36,20 @@ def combine_three_frames(frame1, frame2, frame3, width, height):
 
     # since the odering of TrackNet  is 'channels_first', so we need to change the axis
     imgs = np.rollaxis(imgs, 2, 0)
-    return np.array([imgs])
+    return np.array(imgs)
 
 
 class BallDetector:
     """
     Ball Detector model responsible for receiving the frames and detecting the ball
     """
-    def __init__(self, save_weights_path, out_channels=2):
-        self.device = torch.device("cuda:0")#torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    def __init__(self, save_state, out_channels=2):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         # Load TrackNet model weights
-        # self.detector = BallTrackerNet(out_channels=out_channels)
-        # saved_state_dict = torch.load(save_state)
-        # self.detector.load_state_dict(saved_state_dict['model_state'])
-        # self.detector.eval().to(self.device)
-        self.model_input_width  = 640
-        self.model_input_height = 360
-
-        self.n_classes = 256
-
-        modelFN = Models.TrackNet.TrackNet
-        self.detector = modelFN( self.n_classes , input_height=self.model_input_height, input_width=self.model_input_width   )
-        self.detector.compile(loss='categorical_crossentropy', optimizer= 'adadelta' , metrics=['accuracy'])
-        self.detector.load_weights(save_weights_path)
+        self.detector = BallTrackerNet(out_channels=out_channels)
+        saved_state_dict = torch.load(save_state)
+        self.detector.load_state_dict(saved_state_dict['model_state'])
+        self.detector.eval().to(self.device)
 
         self.current_frame = None
         self.last_frame = None
@@ -69,53 +57,13 @@ class BallDetector:
 
         self.video_width = None
         self.video_height = None
-        
+        self.model_input_width = 640
+        self.model_input_height = 360
 
-        self.threshold_dist = 50
+        self.threshold_dist = 100
         self.xy_coordinates = np.array([[None, None], [None, None]])
 
         self.bounces_indices = []
-
-    def find_countours(self, gray):
-    
-        gray = cv2.GaussianBlur(gray, (7, 7), 0)
-        # perform edge detection, then perform a dilation + erosion to
-        # close gaps in between object edges
-        edged = cv2.Canny(gray, 50, 100)
-        edged = cv2.dilate(edged, None, iterations=1)
-        edged = cv2.erode(edged, None, iterations=1)
-        
-        # find contours in the edge map
-        cnts = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        cnts = imutils.grab_contours(cnts)
-        
-        return edged, cnts
-
-    def keypoint_to_heatmap(self, heatmap):
-    
-        contour_area   = []
-        contour_center = []
-        
-        ret, heatmap   = cv2.threshold(heatmap, 170, 255, cv2.THRESH_BINARY)
-        countour, cnts = self.find_countours(heatmap)
-
-        for c in cnts:
-            
-            area = cv2.contourArea(c)
-
-            M  = cv2.moments(c)
-            cX = int(M["m10"] / M["m00"])
-            cY = int(M["m01"] / M["m00"])
-            
-            contour_area.append(area)
-            contour_center.append([cX, cY])
-
-        if len(contour_area)!=0:
-            ind = np.argmax(contour_area)
-            return (contour_center[ind][0], contour_center[ind][1])
-
-        else:
-            return (None, None)
 
     def detect_ball(self, frame):
         """
@@ -126,7 +74,6 @@ class BallDetector:
         if self.video_width is None:
             self.video_width = frame.shape[1]
             self.video_height = frame.shape[0]
-
         self.last_frame = self.before_last_frame
         self.before_last_frame = self.current_frame
         self.current_frame = frame.copy()
@@ -136,23 +83,21 @@ class BallDetector:
             # combine the frames into 1 input tensor
             frames = combine_three_frames(self.current_frame, self.before_last_frame, self.last_frame,
                                           self.model_input_width, self.model_input_height)
+            frames = (torch.from_numpy(frames) / 255).to(self.device)
             # Inference (forward pass)
-            pr = self.detector.predict(frames)[0]
-            pr = pr.reshape((self.model_input_height, self.model_input_width, self.n_classes)).argmax(axis=2)
-            pr = pr.astype(np.uint8)
-            heatmap = cv2.resize(pr, (self.video_width, self.video_height))
-
-            x, y = self.keypoint_to_heatmap(heatmap)
-
+            x, y = self.detector.inference(frames)
             if x is not None:
+                # Rescale the indices to fit frame dimensions
+                x = x * (self.video_width / self.model_input_width)
+                y = y * (self.video_height / self.model_input_height)
+
                 # Check distance from previous location and remove outliers
                 if self.xy_coordinates[-1][0] is not None:
                     if np.linalg.norm(np.array([x,y]) - self.xy_coordinates[-1]) > self.threshold_dist:
                         x, y = None, None
-
             self.xy_coordinates = np.append(self.xy_coordinates, np.array([[x, y]]), axis=0)
 
-    def mark_positions(self, frame, mark_num=10, frame_num=None, ball_color='yellow'):
+    def mark_positions(self, frame, mark_num=4, frame_num=None, ball_color='yellow'):
         """
         Mark the last 'mark_num' positions of the ball in the frame
         :param frame: the frame we mark the positions in
@@ -173,25 +118,20 @@ class BallDetector:
             q = self.xy_coordinates[-mark_num:, :]
         pil_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(pil_image)
-
-        ball_all = []
         # Mark each position by a circle
-        draw = ImageDraw.Draw(pil_image)
         for i in range(q.shape[0]):
             if q[i, 0] is not None:
                 draw_x = q[i, 0]
                 draw_y = q[i, 1]
                 bbox = (draw_x - 2, draw_y - 2, draw_x + 2, draw_y + 2)
-                
+                draw = ImageDraw.Draw(pil_image)
                 if bounce_i is not None and i == bounce_i:
                     draw.ellipse(bbox, outline='red')
-                
-                ball_all.append((draw_x, draw_y))
+                else:
+                    draw.ellipse(bbox, outline=ball_color)
 
-        draw.line(ball_all, fill ="green", width = 4)
             # Convert PIL image format back to opencv image format
-        frame = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        del draw
+            frame = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         return frame
 
     def show_y_graph(self, player_1_boxes, player_2_boxes):
@@ -225,46 +165,46 @@ class BallDetector:
         plt.show()
 
 
-# if __name__ == "__main__":
-#     ball_detector = BallDetector('saved states/tracknet_weights_lr_1.0_epochs_150_last_trained.pth')
-#     cap = cv2.VideoCapture('../videos/vid1.mp4')
-#     # get videos properties
-#     fps, length, v_width, v_height = get_video_properties(cap)
+if __name__ == "__main__":
+    ball_detector = BallDetector('saved states/tracknet_weights_lr_1.0_epochs_150_last_trained.pth')
+    cap = cv2.VideoCapture('../videos/vid1.mp4')
+    # get videos properties
+    fps, length, v_width, v_height = get_video_properties(cap)
 
-#     frame_i = 0
-#     while True:
-#         ret, frame = cap.read()
-#         frame_i += 1
-#         if not ret:
-#             break
+    frame_i = 0
+    while True:
+        ret, frame = cap.read()
+        frame_i += 1
+        if not ret:
+            break
 
-#         ball_detector.detect_ball(frame)
+        ball_detector.detect_ball(frame)
 
 
-#     cap.release()
-#     cv2.destroyAllWindows()
+    cap.release()
+    cv2.destroyAllWindows()
 
-#     from scipy.interpolate import interp1d
+    from scipy.interpolate import interp1d
 
-#     y_values = ball_detector.xy_coordinates[:,1]
+    y_values = ball_detector.xy_coordinates[:,1]
 
-#     new = signal.savgol_filter(y_values, 3, 2)
+    new = signal.savgol_filter(y_values, 3, 2)
 
-#     x = np.arange(0, len(new))
-#     indices = [i for i, val in enumerate(new) if np.isnan(val)]
-#     x = np.delete(x, indices)
-#     y = np.delete(new, indices)
-#     f = interp1d(x, y, fill_value="extrapolate")
-#     f2 = interp1d(x, y, kind='cubic', fill_value="extrapolate")
-#     xnew = np.linspace(0, len(y_values), num=len(y_values), endpoint=True)
-#     plt.plot(np.arange(0, len(new)), new, 'o',xnew,
-#              f2(xnew), '-r')
-#     plt.legend(['data', 'inter'], loc='best')
-#     plt.show()
+    x = np.arange(0, len(new))
+    indices = [i for i, val in enumerate(new) if np.isnan(val)]
+    x = np.delete(x, indices)
+    y = np.delete(new, indices)
+    f = interp1d(x, y, fill_value="extrapolate")
+    f2 = interp1d(x, y, kind='cubic', fill_value="extrapolate")
+    xnew = np.linspace(0, len(y_values), num=len(y_values), endpoint=True)
+    plt.plot(np.arange(0, len(new)), new, 'o',xnew,
+             f2(xnew), '-r')
+    plt.legend(['data', 'inter'], loc='best')
+    plt.show()
 
-#     positions = f2(xnew)
-#     peaks, _ = find_peaks(positions, distance=30)
-#     a = np.diff(peaks)
-#     plt.plot(positions)
-#     plt.plot(peaks, positions[peaks], "x")
-#     plt.show()
+    positions = f2(xnew)
+    peaks, _ = find_peaks(positions, distance=30)
+    a = np.diff(peaks)
+    plt.plot(positions)
+    plt.plot(peaks, positions[peaks], "x")
+    plt.show()
