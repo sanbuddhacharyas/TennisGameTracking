@@ -4,33 +4,54 @@ import cv2
 import time
 import os
 from glob import glob
+import subprocess
+import shutil
 
 
 
-from detection_new import find_game_in_video, analyize_tennis_game
+from detection_new import analyize_tennis_game, find_game_in_video
 from video_downloader import download_video, download_video_from_youtube
 
 # def video_process(video_path):
 
     
+
 def main():
     s = time.time()
-    os.makedirs('videos', exist_ok=True)
 
     try:
-        os.removedirs('download')
+        shutil.rmtree('download')
+        shutil.rmtree('game_output')
+
     except:
         pass
 
-    video_url = 'https://youtu.be/_-Fiw5bdAw4'
-    # download_video_from_youtube(video_url, 'download')
-    # download_vid_path = glob("./download/*")[0]
+    os.makedirs('videos', exist_ok=True)
+    os.makedirs('output', exist_ok=True)
+    os.makedirs('CSV', exist_ok = True)
+    os.makedirs('ball_npy', exist_ok = True)
+    os.makedirs('ball_plots', exist_ok=True)
+    os.makedirs('download', exist_ok=True)
+    os.makedirs('game_output', exist_ok=True)
+
+   
+
+    video_url = 'https://www.youtube.com/watch?v=jGAMZKj6Ceo'
+    download_video_from_youtube(video_url, 'download/tennis_game')
+    download_vid_path = glob("./download/*.webm")[0]
     
-    # find_game_in_video(vid_path=download_vid_path)
+    print(download_vid_path)
+    find_game_in_video(vid_path=download_vid_path)
+
+    all_game = sorted(glob('./game_output/*.mp4'))
     
-    for vid_path in ['./testing_data/T147Ji7BsQ.mp4']:
+    for vid_path in all_game:
         print(vid_path)
+        
         analyize_tennis_game(vid_path)
+            
+        # except:
+        #     pass
 
     
     print(f'Total computation time : {time.time() - s} seconds')

@@ -1,5 +1,6 @@
 import os
 import time
+import math
 
 from PIL import Image, ImageDraw
 import tensorflow as tf
@@ -13,7 +14,7 @@ from court_detection import CourtDetector
 
 from detection import DetectionModel, center_of_box
 
-from utils import get_video_properties, get_dtype, get_stickman_line_connection
+from utils_ import get_video_properties, get_dtype, get_stickman_line_connection
 
 from tennis_game_analysis import find_outcome_of_shot
 import matplotlib.pyplot as plt
@@ -29,10 +30,10 @@ from tennis_bounce import create_model, segment_ball_trajectory, find_bouncing_p
 from pose import PoseExtractor
 from smooth import Smooth
 from ball_detection import BallDetector
-from statistics import Statistics
+from statistics_ import Statistics
 from stroke_recognition import ActionRecognition
 from court_detection import CourtDetector
-from utils import  get_video_properties, get_dtype
+from utils_ import  get_video_properties, get_dtype
 from detection import DetectionModel
 
 gpus = tf.config.list_physical_devices('GPU')
@@ -79,20 +80,9 @@ def get_stroke_predictions(video_path, stroke_recognition, strokes_frames, playe
     cap.release()
     return predictions
 
-
-def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, v_height, skeleton_df, court_detector, max_data_size=40, verbose=0):
-    """
-    Detect strokes frames using location of the ball and players
-    """
+def ball_trajectory_filter(ball_positions):
 
     ball_positions      = np.array(ball_positions)
-
-    # with open('/home/predator/Desktop/UPWORK/Tennis_tracking/tennis-tracking/event_classifier.pkl', 'rb') as f:
-    #     event_classifier = load(f)
-    event_classifier = tf.keras.models.load_model('/home/predator/Desktop/UPWORK/Tennis_tracking/tennis-tracking/cp.h5')
-
-
-    
 
     ball_x, ball_y = ball_positions[:, 0], ball_positions[:, 1]
     smooth_x = signal.savgol_filter(ball_x, 3, 2)
@@ -109,6 +99,23 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, v_heigh
     xnew      = np.linspace(0, len(ball_y), num=len(ball_y), endpoint=True)
 
 
+    ball_filter_y = ball_f2_y(xnew)
+    ball_filter_x = ball_f2_x(xnew)
+
+    bal_pos_filter = [[x, y] for x, y in zip(ball_filter_x, ball_filter_y)]
+
+    return (ball_filter_x, ball_filter_y, ball_f2_x, ball_f2_y), bal_pos_filter
+
+
+def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_extra, v_height, court_detector, max_data_size=40):
+    """
+    Detect strokes frames using location of the ball and players
+    """
+
+    (ball_filter_x, ball_filter_y, ball_f2_x, ball_f2_y) = ball_filtered
+
+    event_classifier = tf.keras.models.load_model('./cp.h5')
+
     # Player 2 position interpolation
     player_2_centers = np.array([center_of_box(box) for box in player_2_boxes])
     player_2_x, player_2_y = player_2_centers[:, 0], player_2_centers[:, 1]
@@ -124,14 +131,13 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, v_heigh
     player_2_f_x = interp1d(x, y2, fill_value="extrapolate")
     xnew = np.linspace(0, len(player_2_y), num=len(player_2_y), endpoint=True)
 
-    ball_filter_y = ball_f2_y(xnew)
-    ball_filter_x = ball_f2_x(xnew)
 
     # Find all peaks of the ball y index
     p, _     = find_peaks(np.array(ball_filter_y))
     neg_p, _ = find_peaks(max(ball_filter_y) - np.array(ball_filter_y), width=6)
 
-    all_peaks    = sorted(list(p) + list(neg_p))
+
+    all_peaks    = sorted(list(set(list(p) + list(neg_p) + list(bounces_extra))))
     left_right_margin = 20 
 
     bounces_ind  = []
@@ -184,49 +190,6 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, v_heigh
         elif p==4 and prob>0.9:
             neg_peaks.append(i)
 
-        # else:
-        #     if last_index == ind:
-        #         rem_len    = 40 - data.shape[0]
-        #         print("remaining_length", rem_len)
-        #         print(data)
-        #         x_temp     = np.linspace(len(player_2_y), (len(player_2_y)+rem_len), num=rem_len, endpoint=True)
-        #         print(x_temp)
-        #         print("x_temp_output", [i/v_height for i in ball_f2_y(x_temp)])
-        #         total_data = list(data) + list([i/v_height for i in ball_f2_y(x_temp)])
-        #         print("total_data", total_data)
-
-        #         plt.plot(total_data)
-        #         plt.savefig(f'{i}.jpg')
-        #         plt.clf()
-
-        #         print("total_shape",len(total_data))
-                
-        #         X_t = np.array(total_data)[np.newaxis,...]
-                
-        #         prob = max(event_classifier.predict_proba(X_t)[0])
-
-        #         print(p, prob, i)
-
-        #         if (p==1) and (prob>0.8):
-        #             bounces_ind.append(i)
-
-        #         elif p==3 and prob>0.8:
-        #             bounces_ind.append(i)
-
-        #         elif p==2 and prob>0.8:
-        #             peaks.append(i)
-
-        #         elif p==4 and prob>0.9:
-        #             neg_peaks.append(i)
-
-        
-    
-    # Get bottom player wrists positions
-    left_wrist_index = 9
-    right_wrist_index = 10
-    # skeleton_df = skeleton_df.fillna(-1)
-    # left_wrist_pos  = skeleton_df.iloc[:, [left_wrist_index, left_wrist_index + 15]].values
-    # right_wrist_pos = skeleton_df.iloc[:, [right_wrist_index, right_wrist_index + 15]].values
 
     dists = []
 
@@ -285,7 +248,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, v_heigh
 
             else:
                 inv_mats    = court_detector.game_warp_matrix[peak]
-                p           = np.array([ball_x[peak], ball_y[peak]],dtype='float64')
+                p           = np.array([ball_filter_x[peak], ball_filter_y[peak]],dtype='float64')
                 Ball_POS    = np.array([p[0].item(), p[1].item()]).reshape((1, 1, 2))
                 transformed = cv2.perspectiveTransform(Ball_POS, inv_mats)[0][0].astype('int64')
                 
@@ -318,9 +281,9 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_positions, v_heigh
         if len(to_del) == 0:
             break
 
-    bal_pos_filter = [[x, y] for x, y in zip(ball_filter_x, ball_filter_y)]
+    
 
-    return strokes_1_indices, strokes_2_indices, bounces_ind, player_2_f_x, player_2_f_y, netting, bal_pos_filter
+    return strokes_1_indices, strokes_2_indices, bounces_ind, player_2_f_x, player_2_f_y, netting
 
 
 def mark_player_box(frame, boxes, frame_num):
@@ -523,7 +486,7 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
     print(f'New videos created, file name - {output_file}.avi')
     cap.release()
     out.release()
-    cv2.destroyAllWindows()
+
 
 
 def diff_xy(coords):
@@ -1166,7 +1129,6 @@ def make_video(video_path, bouncing_points, stroke_points, netting, volleyed, co
 
     video.release()
     output_video.release()
-    cv2.destroyAllWindows()
 
     return volleyed
 
@@ -1376,23 +1338,30 @@ def analyize_tennis_game(video_path):
     vid_name  = video_path.split('/')[-1].split('.')[0]
     np.save(f'{vid_name}.npy', ball_detector.xy_coordinates)
 
-    player_1_strokes_indices, player_2_strokes_indices, bounces_indices, f2_x, f2_y, netting, coords = find_strokes_indices(
+    ball_filtered, coords = ball_trajectory_filter(ball_detector.xy_coordinates)
+
+    bouncing_extra = ball_trajectory_and_bouncing(video_path, coords, blank_img, bounced_model, point_detection_model, queuelength=15)
+
+    player_1_strokes_indices, player_2_strokes_indices, bounces_indices, f2_x, f2_y, netting = find_strokes_indices(
         detection_model.player_1_boxes,
         detection_model.player_2_boxes,
-        ball_detector.xy_coordinates,
+        ball_filtered,
+        bouncing_extra,
         v_height,
-        None,
         court_detector)
 
-    _     = ball_trajectory_and_bouncing(video_path, coords, blank_img, bounced_model, point_detection_model)
-
-    stroke_indices      = list(player_1_strokes_indices) + list(player_2_strokes_indices)
- 
-    # bounces_indices    = [[item, bounces_indices.count(item)] for item in list(set(bounces_indices))]
-    bounces_indices    = list(bouncing_filter(bounces_indices, court_detector.game_warp_matrix, coords))
+   
 
     # Remove invalid bounces and strokes
+    
+    
+    stroke_indices     = list(player_1_strokes_indices) + list(player_2_strokes_indices)
+    bounces_indices    = list(bouncing_filter(bounces_indices, court_detector.game_warp_matrix, coords))
+
+
+
     all_stroke_bounce = sorted(list(stroke_indices) + list(bounces_indices))
+    
 
     prev_num = 1000
 
@@ -1436,6 +1405,25 @@ def analyize_tennis_game(video_path):
     predictions_2 = get_stroke_predictions(video_path, stroke_recognition,
                                          player_2_strokes_indices, detection_model.player_2_boxes)
 
+    print(predictions_1)
+
+    if len(list(predictions_1.keys())) != 0:
+        min_1         = min(list(predictions_1.keys()))
+
+    else:
+        min_1 = 1000
+
+    if len(list(predictions_2.keys())) != 0:
+        min_2         = min(list(predictions_2.keys()))
+
+    else:
+        min_2 = 1000
+
+    if min_1 < min_2:
+        predictions_1[min_1] = {'probs': np.array([0.03232479, 0.00201552,0.9656596], dtype=np.float32), 'stroke': 'Service/Smash'}
+
+    if min_2 < min_1:
+        predictions_2[min_2] = {'probs': np.array([0.03232479, 0.00201552,0.9656596], dtype=np.float32), 'stroke': 'Service/Smash'}
 
     print("player_1_strokes_indices", player_1_strokes_indices)
     print("player_2_strokes_indices", player_2_strokes_indices)
@@ -1450,7 +1438,7 @@ def analyize_tennis_game(video_path):
    
     statistics = Statistics(court_detector, detection_model)
     heatmap = statistics.get_player_position_heatmap()
-    statistics.display_heatmap(heatmap, court_detector.court_reference.court, title='Heatmap')
+    # statistics.display_heatmap(heatmap, court_detector.court_reference.court, title='Heatmap')
     statistics.get_players_dists()
 
     create_top_view(court_detector, detection_model, fps, tennis_tracking, volleyed)
@@ -1495,7 +1483,8 @@ def find_game_in_video(vid_path):
                     continue
 
                 else:
-                    if (acc <= 90.0) or (acc==100.0):
+                    print(math.isnan(acc))
+                    if (acc <= 90.0) or (acc==100.0) or math.isnan(acc):
                         
                         court_detection=False
                         frame_i += 1
@@ -1524,6 +1513,8 @@ def find_game_in_video(vid_path):
                     game_frame_holder = []
                     court_detection   = False
                     temp_court.frame_points = None
+
+                    break
 
             frame_i += 1
                     
