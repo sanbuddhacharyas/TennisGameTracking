@@ -252,8 +252,8 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
                 Ball_POS    = np.array([p[0].item(), p[1].item()]).reshape((1, 1, 2))
                 transformed = cv2.perspectiveTransform(Ball_POS, inv_mats)[0][0].astype('int64')
                 
-                if (transformed[0]>0) and (transformed[1]>0):
-                    netting.append(peak)
+                # if (transformed[0]>0) and (transformed[1]>0):
+                #     netting.append(peak)
 
     # Assert the diff between to consecutive strokes is below some threshold
     while True:
@@ -1277,7 +1277,7 @@ def analyize_tennis_game(video_path):
     court_detector  = CourtDetector()
     detection_model = DetectionModel(dtype=dtype)
     stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
-    ball_detector = BallDetector('./saved states/tracknet_weights_2_classes.pth', out_channels=2)
+    ball_detector = BallDetector('./weights/model.3', out_channels=2)
     point_detection_model = tf.keras.models.load_model('./bouncing_point_detection.h5')
 
     tennis_tracking = pd.DataFrame(columns=["Time", "Frame", "Player_Near_End_Pos", "Player_Far_End_Pos", "Ball_POS", "Ball_bounced", "Stroke_by", "Stroke_Type", "Ball_predict_point"])

@@ -1,4 +1,4 @@
-import tensorflow as tf
+# import tensorflow as tf
 import numpy as np
 import cv2
 import time
@@ -19,12 +19,12 @@ from video_downloader import download_video, download_video_from_youtube
 def main():
     s = time.time()
 
-    try:
-        shutil.rmtree('download')
-        shutil.rmtree('game_output')
+    # try:
+    #     shutil.rmtree('download')
+    #     shutil.rmtree('game_output')
 
-    except:
-        pass
+    # except:
+    #     pass
 
     os.makedirs('videos', exist_ok=True)
     os.makedirs('output', exist_ok=True)
@@ -36,16 +36,16 @@ def main():
 
    
 
-    video_url = 'https://www.youtube.com/watch?v=jGAMZKj6Ceo'
-    download_video_from_youtube(video_url, 'download/tennis_game')
+    # video_url = 'https://www.youtube.com/watch?v=jGAMZKj6Ceo'
+    # download_video_from_youtube(video_url, 'download/tennis_game')
     download_vid_path = glob("./download/*.webm")[0]
     
-    print(download_vid_path)
+    # print(download_vid_path)
     find_game_in_video(vid_path=download_vid_path)
 
     all_game = sorted(glob('./game_output/*.mp4'))
     
-    for vid_path in all_game:
+    for vid_path in ['./testing_data/game_play_1.mp4']:
         print(vid_path)
         
         analyize_tennis_game(vid_path)

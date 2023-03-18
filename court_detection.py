@@ -6,6 +6,8 @@ from itertools import combinations
 from court_reference import CourtReference
 import scipy.signal as sp
 
+import time
+
 
 class CourtDetector:
     """
@@ -48,6 +50,7 @@ class CourtDetector:
         self.verbose = verbose
         self.frame = frame
         self.v_height, self.v_width = frame.shape[:2]
+        
         # Get binary image from the frame
         self.gray = self._threshold(frame)
 
@@ -55,21 +58,32 @@ class CourtDetector:
         filtered = self._filter_pixels(self.gray)
 
         try:
+
+            
             # Detect lines using Hough transform
             horizontal_lines, vertical_lines = self._detect_lines(filtered)
 
+            if len(horizontal_lines)==0 or len(vertical_lines)==0 :
+                return False, None
+
+         
+          
             # Find transformation from reference court to frame`s court
             court_warp_matrix, game_warp_matrix, self.court_score = self._find_homography(horizontal_lines, vertical_lines)
-
+           
             self.court_warp_matrix.append(court_warp_matrix)
             self.game_warp_matrix.append(game_warp_matrix)
+
+           
             court_accuracy = self._get_court_accuracy(0)
+           
             if court_accuracy > self.success_accuracy and self.court_score > self.success_score:
                 self.success_flag = True
             # print('Court accuracy = %.2f' % court_accuracy)
             # Find important lines location on frame
+   
             self.find_lines_location()
-
+         
             return True, court_accuracy
 
         except:
@@ -250,8 +264,9 @@ class CourtDetector:
                 for i, configuration in self.court_reference.court_conf.items():
                     # Find transformation
 
-                    matrix, _ = cv2.findHomography(np.float32(configuration), np.float32(intersections), method=0)
+                    matrix, _  = cv2.findHomography(np.float32(configuration), np.float32(intersections), method=0)
                     inv_matrix = cv2.invert(matrix)[1]
+                    
                     # Get transformation score
                     confi_score = self._get_confi_score(matrix)
 
@@ -522,74 +537,77 @@ def display_lines_and_points_on_frame(frame, lines=(), points=(), line_color=(0,
 
 
 if __name__ == '__main__':
-    filename = '/home/predator/Desktop/UPWORK/Tennis_tracking/tennis-tracking/frames/0.jpg'
+    filename = '/home/predator/Desktop/UPWORK/Tennis_tracking/TennisProject-20230219T111152Z-001/TennisProject/frames/2.jpg'
     img = cv2.imread(filename)
     import time
 
     h, w, _ = img.shape
     s = time.time()
     court_detector = CourtDetector()
-    court_detector.detect(img, 0)
-    top, bottom = court_detector.get_extra_parts_location()
-    cv2.circle(img, tuple(top), 3, (0,255,0), 1)
-    cv2.circle(img, tuple(bottom), 3, (0,255,0), 1)
+    court_, acc    = court_detector.detect(img, 0)
 
-    # self.baseline_top
-    # self.baseline_bottom = lines[4:8]
-    # self.net = lines[8:12]
-    # self.left_court_line = lines[12:16]
-    # self.right_court_line = lines[16:20]
-    # self.left_inner_line = lines[20:24]
-    # self.right_inner_line = lines[24:28]
-    # self.middle_line = lines[28:32]
-    # self.top_inner_line = lines[32:36]
-    # self.bottom_inner_line = lines[36:40]
+    print(court_)
+    if court_==True:
+        top, bottom = court_detector.get_extra_parts_location()
+        cv2.circle(img, tuple(top), 3, (0,255,0), 1)
+        cv2.circle(img, tuple(bottom), 3, (0,255,0), 1)
 
-    # img[int(bottom[1]-10):int(bottom[1]+10), int(bottom[0] - 10):int(bottom[0]+10), :] = (0,0,0)
-    # img[int(top[1]-10):int(top[1]+10), int(top[0] - 10):int(top[0]+10), :] = (0,0,0)
-    
+        # self.baseline_top
+        # self.baseline_bottom = lines[4:8]
+        # self.net = lines[8:12]
+        # self.left_court_line = lines[12:16]
+        # self.right_court_line = lines[16:20]
+        # self.left_inner_line = lines[20:24]
+        # self.right_inner_line = lines[24:28]
+        # self.middle_line = lines[28:32]
+        # self.top_inner_line = lines[32:36]
+        # self.bottom_inner_line = lines[36:40]
 
-    court_detector.find_lines_location()
+        # img[int(bottom[1]-10):int(bottom[1]+10), int(bottom[0] - 10):int(bottom[0]+10), :] = (0,0,0)
+        # img[int(top[1]-10):int(top[1]+10), int(top[0] - 10):int(top[0]+10), :] = (0,0,0)
+        
 
-    # print(court_detector.baseline_top, court_detector.baseline_bottom, court_detector.top_inner_line, court_detector.bottom_inner_line)
-    
-    # # cv2.circle(img, (int(court_detector.baseline_top[0]), int(court_detector.baseline_top[1])), 3, (0,0, 255), 1)
-    # # cv2.circle(img, (int(court_detector.baseline_top[2]), int(court_detector.baseline_top[3])), 3, (0,0, 255), 1)
+        court_detector.find_lines_location()
 
-    # # cv2.circle(img, (int(court_detector.baseline_bottom[0]), int(court_detector.baseline_bottom[1])), 3, (0,0, 255), 1)
-    # # cv2.circle(img, (int(court_detector.baseline_bottom[2]), int(court_detector.baseline_bottom[3])), 3, (0,0, 255), 1)
+        # print(court_detector.baseline_top, court_detector.baseline_bottom, court_detector.top_inner_line, court_detector.bottom_inner_line)
+        
+        # # cv2.circle(img, (int(court_detector.baseline_top[0]), int(court_detector.baseline_top[1])), 3, (0,0, 255), 1)
+        # # cv2.circle(img, (int(court_detector.baseline_top[2]), int(court_detector.baseline_top[3])), 3, (0,0, 255), 1)
 
-    p1 = (int(court_detector.baseline_top[0]), int(court_detector.baseline_top[1]))
-    p2 = (int(court_detector.baseline_top[2]), int(court_detector.baseline_top[3]))
+        # # cv2.circle(img, (int(court_detector.baseline_bottom[0]), int(court_detector.baseline_bottom[1])), 3, (0,0, 255), 1)
+        # # cv2.circle(img, (int(court_detector.baseline_bottom[2]), int(court_detector.baseline_bottom[3])), 3, (0,0, 255), 1)
 
-    p3 = (int(court_detector.baseline_bottom[0]), int(court_detector.baseline_bottom[1]))
-    p4 = (int(court_detector.baseline_bottom[2]), int(court_detector.baseline_bottom[3]))
+        p1 = (int(court_detector.baseline_top[0]), int(court_detector.baseline_top[1]))
+        p2 = (int(court_detector.baseline_top[2]), int(court_detector.baseline_top[3]))
 
-    four_corners = np.array([p1, p2, p3, p4])
-    # print(four_corners.shape)
+        p3 = (int(court_detector.baseline_bottom[0]), int(court_detector.baseline_bottom[1]))
+        p4 = (int(court_detector.baseline_bottom[2]), int(court_detector.baseline_bottom[3]))
 
-    # cv2.circle(img, p1, 3, (0, 0, 255), 1)
+        four_corners = np.array([p1, p2, p3, p4])
+        # print(four_corners.shape)
 
-    inv_mats = court_detector.game_warp_matrix[0]
+        # cv2.circle(img, p1, 3, (0, 0, 255), 1)
 
-    # print(inv_mats.shape)
-    # print(four_corners.shape)
+        inv_mats = court_detector.game_warp_matrix[0]
 
-    # print(inv_mats)
-    # print(four_corners)
+        # print(inv_mats.shape)
+        # print(four_corners.shape)
 
-    ref_court = None
-    court_reference = CourtReference()
-    for i, configuration in court_reference.court_conf.items():
-        if i == 1:
-            ref_court = configuration
-            break
+        # print(inv_mats)
+        # print(four_corners)
 
-    print(np.array(four_corners, dtype=np.float32), np.array(ref_court, dtype=np.float32))
+        ref_court = None
+        court_reference = CourtReference()
+        for i, configuration in court_reference.court_conf.items():
+            if i == 1:
+                ref_court = configuration
+                break
 
-    max_x, max_y = np.array(ref_court, dtype=np.float32)[:,0].max(), np.array(ref_court, dtype=np.float32)[:,1].max()
-    # matrix = cv2.getPerspectiveTransform(np.array(four_corners, dtype=np.float32), np.array(ref_court, dtype=np.float32))
-    result = cv2.warpPerspective(img, inv_mats, (max_x, max_y))
+        print(np.array(four_corners, dtype=np.float32), np.array(ref_court, dtype=np.float32))
+
+        max_x, max_y = np.array(ref_court, dtype=np.float32)[:,0].max(), np.array(ref_court, dtype=np.float32)[:,1].max()
+        # matrix = cv2.getPerspectiveTransform(np.array(four_corners, dtype=np.float32), np.array(ref_court, dtype=np.float32))
+        result = cv2.warpPerspective(img, inv_mats, (max_x, max_y))
 
     # print(ref_court, four_corners)
         
@@ -617,7 +635,7 @@ if __name__ == '__main__':
     
     # print(transformed_corners)
 
-    cv2.imshow('df', cv2.resize(result, (200, 500)))
-    if cv2.waitKey(0):
-        cv2.destroyAllWindows()
+    # cv2.imshow('df', cv2.resize(result, (200, 500)))
+    # if cv2.waitKey(0):
+    #     cv2.destroyAllWindows()
     print(f'time = {time.time() - s}')
