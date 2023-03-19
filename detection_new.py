@@ -1365,15 +1365,15 @@ def analyize_tennis_game(video_path):
     video.release()
 
     vid_name  = video_path.split('/')[-1].split('.')[0]
-    np.save(f'{vid_name}.npy', ball_detector.xy_coordinates)
+    np.save(f'./ball_npy/{vid_name}.npy', ball_detector.xy_coordinates)
 
     plt.plot(ball_detector.xy_coordinates[:,1])
-    plt.savefig('before_filtered.jpg')
+    plt.savefig('./ball_plots/before_filtered.jpg')
     plt.cla()
 
 
     plt.plot(np.array(yolo_ball_pos)[:,1])
-    plt.savefig('yolo_ball_pos.jpg')
+    plt.savefig('./ball_plots/yolo_ball_pos.jpg')
     plt.cla()
 
 
@@ -1478,7 +1478,7 @@ def analyize_tennis_game(video_path):
     print("volleyed", volleyed)
    
     statistics = Statistics(court_detector, detection_model)
-    heatmap = statistics.get_player_position_heatmap()
+    # heatmap = statistics.get_player_position_heatmap()
     # statistics.display_heatmap(heatmap, court_detector.court_reference.court, title='Heatmap')
     statistics.get_players_dists()
 
@@ -1492,7 +1492,7 @@ def analyize_tennis_game(video_path):
                       p1=player_1_strokes_indices, p2=player_2_strokes_indices, f_x=f2_x, f_y=f2_y)
 
     # tennis_tracking = tennis_tracking[['Time','Frame','Player_Near_End_Pos','Player_Far_End_Pos','Ball_POS', 'Ball_bounced', 'Stroke_by', 'Stroke_Type','Ball_Bounce_Outcome']]
-    tennis_tracking.to_csv(f"{output_file.replace('.mp4', '.csv')}", index = False)
+    tennis_tracking.to_csv(f"./CSV/{output_file.replace('.mp4', '.csv')}", index = False)
 
 def find_game_in_video(vid_path):
 
