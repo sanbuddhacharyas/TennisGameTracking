@@ -5,6 +5,8 @@ import math
 from PIL import Image, ImageDraw
 import tensorflow as tf
 
+from ultralytics import YOLO
+
 import cv2
 import numpy as np
 from scipy import signal
@@ -13,6 +15,7 @@ from scipy.signal import find_peaks
 from court_detection import CourtDetector
 
 from detection import DetectionModel, center_of_box
+from detect_players import detect_player_ball
 
 from utils_ import get_video_properties, get_dtype, get_stickman_line_connection
 
@@ -106,8 +109,22 @@ def ball_trajectory_filter(ball_positions):
 
     return (ball_filter_x, ball_filter_y, ball_f2_x, ball_f2_y), bal_pos_filter
 
+def find_min_dist(Ball_POS, bbox):
+    x1, y1 = bbox[0], bbox[1]
+    x2, y2 = bbox[2], bbox[3]
 
-def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_extra, v_height, court_detector, max_data_size=40):
+    low_dis = 1000
+    for pos in [[x1, y1], [x1, y2], [x2, y1], [x2, y2]]:
+        cal_dis = np.linalg.norm(pos - Ball_POS)
+        if low_dis > cal_dis:
+            low_dis = cal_dis
+
+    return low_dis
+
+
+
+
+def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_extra, v_width, v_height, court_detector, max_data_size=40):
     """
     Detect strokes frames using location of the ball and players
     """
@@ -196,17 +213,12 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
     # Calculate dist between ball and bottom player
     for i, player_box in enumerate(player_1_boxes):
         if player_box[0] is not None:
-            player_center = center_of_box(player_box)
-            Ball_POS = np.array([ball_f2_x(i), ball_f2_y(i)])
-            box_dist = np.linalg.norm(player_center - Ball_POS)
-            right_wrist_dist, left_wrist_dist = np.inf, np.inf
-
+         
+            Ball_POS   = np.array([ball_f2_x(i)/v_width, ball_f2_y(i)/v_height])
+            player_box = np.array([player_box[0]/v_width, player_box[1]/v_height, player_box[2]/v_width, player_box[3]/v_height])
+            box_dist = find_min_dist(Ball_POS, player_box)
            
             try:
-                # if right_wrist_pos[i, 0] > 0:
-                #     right_wrist_dist = np.linalg.norm(right_wrist_pos[i, :] - Ball_POS)
-                # if left_wrist_pos[i, 0] > 0:
-                #     left_wrist_dist = np.linalg.norm(left_wrist_pos[i, :] - Ball_POS)
                 dists.append(box_dist)
             
             except:
@@ -220,18 +232,28 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
     dists2 = []
     
     # Calculate dist between ball and top player
-    for i in range(len(player_2_centers)):
-        Ball_POS = np.array([ball_f2_x(i), ball_f2_y(i)])
-        box_center = np.array([player_2_f_x(i), player_2_f_y(i)])
-        box_dist = np.linalg.norm(box_center - Ball_POS)
-        dists2.append(box_dist)
+    for i, player_box in enumerate(player_2_boxes):
+        if player_box[0] is not None:
+            Ball_POS   = np.array([ball_f2_x(i)/v_width, ball_f2_y(i)/v_height])
+            player_box = np.array([player_box[0]/v_width, player_box[1]/v_height, player_box[2]/v_width, player_box[3]/v_height])
+            box_dist   = find_min_dist(Ball_POS, player_box)
+           
+            try:
+                dists2.append(box_dist)
+            
+            except:
+                dists2.append(None)
+
+        else:
+            dists2.append(None)
+
     dists2 = np.array(dists2)
 
     strokes_1_indices = []
 
     # Find stroke for bottom player by thresholding the dists
     for peak in peaks:
-        player_box_height = max(player_1_boxes[peak][3] - player_1_boxes[peak][1], 130)
+        player_box_height = max(player_1_boxes[peak][3]/v_height - player_1_boxes[peak][1]/v_height, 0.2)
 
         if dists[peak] != None:
             if dists[peak] < (player_box_height * 4 / 5):
@@ -243,7 +265,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
     # Find stroke for top player by thresholding the dists
     for peak in neg_peaks:
         if dists2[peak] != None:
-            if dists2[peak] < 100:
+            if dists2[peak] < 0.15:
                 strokes_2_indices.append(peak)
 
             else:
@@ -426,9 +448,10 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
                 probs, stroke = strokes_predictions_1[frame_number + i]['probs'], strokes_predictions_1[frame_number + i][
                     'stroke']
             
-                cv2.putText(img, f'Stroke : {stroke}',
-                            (int(player1_boxes[frame_number][0]) - 10, int(player1_boxes[frame_number][1]) - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                if player1_boxes[frame_number][0]!=None:
+                    cv2.putText(img, f'Stroke : {stroke}',
+                                (int(player1_boxes[frame_number][0]) - 10, int(player1_boxes[frame_number][1]) - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
                 break
 
@@ -1274,8 +1297,10 @@ def analyize_tennis_game(video_path):
     print("video_path", video_path)
     video = cv2.VideoCapture(video_path)
 
-    court_detector  = CourtDetector()
-    detection_model = DetectionModel(dtype=dtype)
+    court_detector    = CourtDetector()
+    detection_model   = DetectionModel(dtype=dtype)
+    player_ball_model = YOLO('./weights/best.pt') 
+
     stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
     ball_detector = BallDetector('./weights/model.3', out_channels=2)
     point_detection_model = tf.keras.models.load_model('./bouncing_point_detection.h5')
@@ -1301,6 +1326,7 @@ def analyize_tennis_game(video_path):
     bounced_model.build(input_shape=(None, img_size[0], img_size[1], 1))
     bounced_model.load_weights('./bounce_model.h5')
 
+    yolo_ball_pos = []
     
 
     while True:
@@ -1316,10 +1342,14 @@ def analyize_tennis_game(video_path):
             court_detector.track_court(frame)
 
             # detect
-            detection_model.detect_player_1(frame.copy(), court_detector)
-            detection_model.detect_top_persons(frame, court_detector, frame_i)
+            player_1, player_2, ball_pos = detect_player_ball(player_ball_model, frame.copy())
+            detection_model.player_1_boxes.append(player_1)
+            detection_model.player_2_boxes.append(player_2)
 
-            ball_detector.detect_ball(court_detector.delete_extra_parts(frame))
+            ball_pos_center = center_of_box(ball_pos)
+            ball_detector.detect_ball(court_detector.delete_extra_parts(frame), ball_pos_center)
+
+            yolo_ball_pos.append(ball_pos_center)
 
             total_time += (time.time() - start_time)
             print('Processing frame %d/%d  FPS %04f' % (frame_i, length, frame_i / total_time), '\r', end='')
@@ -1333,10 +1363,20 @@ def analyize_tennis_game(video_path):
             break
 
     video.release()
-    detection_model.find_player_2_box()
 
     vid_name  = video_path.split('/')[-1].split('.')[0]
     np.save(f'{vid_name}.npy', ball_detector.xy_coordinates)
+
+    plt.plot(ball_detector.xy_coordinates[:,1])
+    plt.savefig('before_filtered.jpg')
+    plt.cla()
+
+
+    plt.plot(np.array(yolo_ball_pos)[:,1])
+    plt.savefig('yolo_ball_pos.jpg')
+    plt.cla()
+
+
 
     ball_filtered, coords = ball_trajectory_filter(ball_detector.xy_coordinates)
 
@@ -1347,6 +1387,7 @@ def analyize_tennis_game(video_path):
         detection_model.player_2_boxes,
         ball_filtered,
         bouncing_extra,
+        v_width,
         v_height,
         court_detector)
 

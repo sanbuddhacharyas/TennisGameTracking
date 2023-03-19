@@ -117,7 +117,7 @@ class BallDetector:
         else:
             return (None, None)
 
-    def detect_ball(self, frame):
+    def detect_ball(self, frame, pre_ball_pos):
         """
         After receiving 3 consecutive frames, the ball will be detected using TrackNet model
         :param frame: current frame
@@ -144,11 +144,16 @@ class BallDetector:
 
             x, y = self.keypoint_to_heatmap(heatmap)
 
+            if (x==None) or (y==None):
+                x, y = pre_ball_pos
+
             if x is not None:
                 # Check distance from previous location and remove outliers
                 if self.xy_coordinates[-1][0] is not None:
                     if np.linalg.norm(np.array([x,y]) - self.xy_coordinates[-1]) > self.threshold_dist:
                         x, y = None, None
+
+            
 
             self.xy_coordinates = np.append(self.xy_coordinates, np.array([[x, y]]), axis=0)
 
