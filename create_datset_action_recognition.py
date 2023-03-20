@@ -186,7 +186,7 @@ def make_gif(video, frame_id, frame_count, tennis_tracking, player_mode, save_na
 def crop_players(frame, bbox, margin=20):
     return frame[bbox[1]-margin:bbox[3]+margin, bbox[0]-margin:bbox[2]+margin, :]
 
-def find_csv_file_game(video_path):
+def find_csv_file_game(video_path, save_location):
     dtype = get_dtype()
 
     print("video_path", video_path)
@@ -273,12 +273,12 @@ def find_csv_file_game(video_path):
 
         if frame_i in player_1_strokes_indices:
             stroke_by = "P1"
-            gif_path  = f"./action_recognition_player/{video_path.split('/')[-1].split('.')[0]}_{frame_i}_{stroke_by}"
+            gif_path  = f"{save_location}/{video_path.split('/')[-1].split('.')[0]}_{frame_i}_{stroke_by}"
         
 
         if frame_i in player_2_strokes_indices:
             stroke_by = "P2"      
-            gif_path  = f"./action_recognition_player/{video_path.split('/')[-1].split('.')[0]}_{frame_i}_{stroke_by}"
+            gif_path  = f"{save_location}/{video_path.split('/')[-1].split('.')[0]}_{frame_i}_{stroke_by}"
 
         row = {"vid_name":vid_name, "Frame":frame_i, "Player_1_bbox":player_1, "Player_2_bbox":player_2, "Stroke_by":stroke_by, "Stroke_Type":'None','gif_path':gif_path}
         tennis_tracking = tennis_tracking.append(row, ignore_index=True)
