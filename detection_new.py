@@ -131,7 +131,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
 
     (ball_filter_x, ball_filter_y, ball_f2_x, ball_f2_y) = ball_filtered
 
-    event_classifier = tf.keras.models.load_model('./cp.h5')
+    event_classifier = tf.keras.models.load_model('/home/predator/Desktop/UPWORK/Tennis_tracking/tennis-tracking/cp.h5')
 
     # Player 2 position interpolation
     player_2_centers = np.array([center_of_box(box) for box in player_2_boxes])
@@ -189,7 +189,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
         print(X_t.shape[1])
      
         # if X_t.shape[1]==max_data_size:
-        p    = event_classifier.predict(X_t)[0]
+        p    = event_classifier.predict(X_t)[0][0]
         prob = np.max(p)
         p    = np.argmax(p) + 1
 
@@ -267,13 +267,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
         if dists2[peak] != None:
             if dists2[peak] < 0.15:
                 strokes_2_indices.append(peak)
-
-            else:
-                inv_mats    = court_detector.game_warp_matrix[peak]
-                p           = np.array([ball_filter_x[peak], ball_filter_y[peak]],dtype='float64')
-                Ball_POS    = np.array([p[0].item(), p[1].item()]).reshape((1, 1, 2))
-                transformed = cv2.perspectiveTransform(Ball_POS, inv_mats)[0][0].astype('int64')
-                
+          
                 # if (transformed[0]>0) and (transformed[1]>0):
                 #     netting.append(peak)
 
@@ -1514,11 +1508,13 @@ def find_game_in_video(vid_path):
      # Loop over all frames in the videos
     while True:
         ret, frame = video.read()
-
+        print("frame_i", frame_i)
         if ret:
+            
             if court_detection == False:
+                print("above_court")
                 court_detection, acc = temp_court.detect(frame)
-                
+                print("Frame", frame_i, court_detection, acc)
                 if court_detection==False:
                     frame_i += 1
                     continue
@@ -1533,15 +1529,16 @@ def find_game_in_video(vid_path):
 
                     start_index = frame_i
                     court_detection = True
-                    print("Frame", frame_i, court_detection, acc)
+                    
 
             if court_detection == True:
-             
-                try:
-                    temp_court.track_court(frame)
+                
+                track_court_status = temp_court.track_court(frame)
+
+                if track_court_status:
                     game_frame_holder.append(frame)
                 
-                except:
+                else:
                     if len(game_frame_holder) > 30:
             
                         game_index.append([start_index, frame_i])

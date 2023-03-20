@@ -1,4 +1,4 @@
-# import tensorflow as tf
+import tensorflow as tf
 import numpy as np
 import cv2
 import time
@@ -36,11 +36,12 @@ def main():
 
    
 
-    # video_url = 'https://www.youtube.com/watch?v=jGAMZKj6Ceo'
+    # video_url = 'https://youtu.be/OXaEUUUJJ7s?t=1'
     # download_video_from_youtube(video_url, 'download/tennis_game')
-    # download_vid_path = glob("./download/*.webm")[0]
+    download_vid_path = glob("./download/*.webm")[0]
     
-    # # print(download_vid_path)
+    # print(download_vid_path)
+    # print("find_game_in_video")
     # find_game_in_video(vid_path=download_vid_path)
 
     # all_game = sorted(glob('./game_output/*.mp4'))

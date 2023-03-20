@@ -7,6 +7,7 @@ from court_reference import CourtReference
 import scipy.signal as sp
 
 import time
+import math
 
 
 class CourtDetector:
@@ -63,6 +64,7 @@ class CourtDetector:
             # Detect lines using Hough transform
             horizontal_lines, vertical_lines = self._detect_lines(filtered)
 
+            print(horizontal_lines)
             if len(horizontal_lines)==0 or len(vertical_lines)==0 :
                 return False, None
 
@@ -246,6 +248,7 @@ class CourtDetector:
         max_score = -np.inf
         max_mat = None
         max_inv_mat = None
+
         k = 0
         # Loop over every pair of horizontal lines and every pair of vertical lines
         for horizontal_pair in list(combinations(horizontal_lines, 2)):
@@ -270,6 +273,7 @@ class CourtDetector:
                     # Get transformation score
                     confi_score = self._get_confi_score(matrix)
 
+
                     if max_score < confi_score:
                         max_score = confi_score
                         max_mat = matrix
@@ -277,7 +281,11 @@ class CourtDetector:
                         self.best_conf = i
 
                     k += 1
+          
+                    
 
+            # if break_loop:
+            #     break
 
         # print(f'Score = {max_score}')
         # print(f'Combinations tested = {k}')
@@ -439,23 +447,26 @@ class CourtDetector:
 
             # if less than 50 points were found detect court from the start instead of tracking
             if len(new_points) < 50:
-                if self.dist > 20:
-                    cv2.imshow('court', copy)
-                    if cv2.waitKey(0) & 0xff == 27:
-                        cv2.destroyAllWindows()
-                    self.detect(frame)
-                    conf_points = np.array(self.court_reference.court_conf[self.best_conf], dtype=np.float32).reshape(
-                        (-1, 1, 2))
-                    self.frame_points = cv2.perspectiveTransform(conf_points,
-                                                                 self.court_warp_matrix[-1]).squeeze().round()
+                return False
+                # print("less than 50")
+                # court_detection, acc = self.detect(frame)
+                
+                # if court_detection==False:
 
-                    print('Smaller than 50')
-                    return
-                else:
-                    print('Court tracking failed, adding 5 pixels to dist')
-                    self.dist += 5
-                    self.track_court(frame)
-                    return
+                #     print('court False')
+                #     return False
+
+                # else:
+                #     if (acc <= 90.0) or (acc==100.0) or math.isnan(acc):
+                #         print('Acc False')
+                #         return False
+                
+                # conf_points = np.array(self.court_reference.court_conf[self.best_conf], dtype=np.float32).reshape(
+                #     (-1, 1, 2))
+                # self.frame_points = cv2.perspectiveTransform(conf_points,
+                #                                                 self.court_warp_matrix[-1]).squeeze().round()
+
+            
         # Find transformation from new lines
         i1 = line_intersection(new_lines[0], new_lines[2])
         i2 = line_intersection(new_lines[0], new_lines[3])
@@ -468,6 +479,8 @@ class CourtDetector:
         self.court_warp_matrix.append(matrix)
         self.game_warp_matrix.append(inv_matrix)
         self.frame_points = intersections
+
+        return True
 
 
 def sort_intersection_points(intersections):
