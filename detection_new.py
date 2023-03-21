@@ -1537,14 +1537,31 @@ def find_game_in_video(vid_path):
 
             if court_detection == True:
                 
-                track_court_status = temp_court.track_court(frame)
+                try:
+                    track_court_status = temp_court.track_court(frame)
 
-                if track_court_status:
-                    game_frame_holder.append(frame)
+                    if track_court_status:
+                        game_frame_holder.append(frame)
+                    
+                    else:
+                        if len(game_frame_holder) > 30:
                 
-                else:
+                            game_index.append([start_index, frame_i])
+                            out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
+                                cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
+
+                            save_video(game_frame_holder, out)
+                            game_play += 1
+
+                        game_frame_holder = []
+                        court_detection   = False
+                        temp_court.frame_points = None
+
+                        break
+
+                except:
                     if len(game_frame_holder) > 30:
-            
+                
                         game_index.append([start_index, frame_i])
                         out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
                             cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
@@ -1557,6 +1574,7 @@ def find_game_in_video(vid_path):
                     temp_court.frame_points = None
 
                     break
+
 
             frame_i += 1
                     
