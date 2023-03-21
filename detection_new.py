@@ -196,7 +196,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
         prob = np.max(p)
         p    = np.argmax(p) + 1
 
-        print("output", p, prob, peak[0]-ball_traj_y_nor[i])
+        print("output", p, prob, peak[0]-ball_traj_y_nor[i], i)
 
 
         if (p==1) and (prob>0.8):
@@ -1490,7 +1490,7 @@ def analyize_tennis_game(video_path):
                       p1=player_1_strokes_indices, p2=player_2_strokes_indices, f_x=f2_x, f_y=f2_y)
 
     # tennis_tracking = tennis_tracking[['Time','Frame','Player_Near_End_Pos','Player_Far_End_Pos','Ball_POS', 'Ball_bounced', 'Stroke_by', 'Stroke_Type','Ball_Bounce_Outcome']]
-    tennis_tracking.to_csv(f"./CSV/{output_file.replace('.mp4', '.csv')}", index = False)
+    tennis_tracking.to_excel(f"./CSV/{output_file.replace('.mp4', '.xlsx')}", index = False)
 
 def find_game_in_video(vid_path):
 
