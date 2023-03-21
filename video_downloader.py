@@ -1,5 +1,4 @@
 import urllib.request
-from pytube import YouTube
 import yt_dlp
 import subprocess
 
