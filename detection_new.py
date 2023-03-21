@@ -131,7 +131,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
 
     (ball_filter_x, ball_filter_y, ball_f2_x, ball_f2_y) = ball_filtered
 
-    event_classifier = tf.keras.models.load_model('/home/predator/Desktop/UPWORK/Tennis_tracking/tennis-tracking/cp.h5')
+    event_classifier = tf.keras.models.load_model('./weights/cp.h5')
 
     # Player 2 position interpolation
     player_2_centers = np.array([center_of_box(box) for box in player_2_boxes])
@@ -186,14 +186,18 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
 
         X_t = np.array(data)[np.newaxis,...,np.newaxis]
 
-        print(X_t.shape[1])
      
         # if X_t.shape[1]==max_data_size:
-        p    = event_classifier.predict(X_t)[0][0]
+        pred = event_classifier.predict(X_t)
+
+        p    = pred[0][0]
+        peak = pred[1][0]
+
         prob = np.max(p)
         p    = np.argmax(p) + 1
 
-        print(p, prob, i)
+        print("output", p, prob, peak[0]-ball_traj_y_nor[i])
+
 
         if (p==1) and (prob>0.8):
             bounces_ind.append(i)
