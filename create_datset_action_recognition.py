@@ -32,21 +32,21 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, v_width,
     (ball_filter_x, ball_filter_y, ball_f2_x, ball_f2_y) = ball_filtered
 
     # Player 2 position interpolation
-    player_2_centers = np.array([center_of_box(box) for box in player_2_boxes])
-    print("player_2_boxes", len(player_2_boxes))
-    print("player_2_centers_shape",player_2_centers.shape)
-    player_2_x, player_2_y = player_2_centers[:, 0], player_2_centers[:, 1]
-    player_2_x = signal.savgol_filter(player_2_x, 3, 2)
-    player_2_y = signal.savgol_filter(player_2_y, 3, 2)
-    x = np.arange(0, len(player_2_y))
-    indices = [i for i, val in enumerate(player_2_y) if np.isnan(val)]
-    x = np.delete(x, indices)
-    y1 = np.delete(player_2_y, indices)
-    y2 = np.delete(player_2_x, indices)
-    player_2_f_y = interp1d(x, y1, fill_value="extrapolate")
+    # player_2_centers = np.array([center_of_box(box) for box in player_2_boxes])
+    # print("player_2_boxes", len(player_2_boxes))
+    # print("player_2_centers_shape",player_2_centers.shape)
+    # player_2_x, player_2_y = player_2_centers[:, 0], player_2_centers[:, 1]
+    # player_2_x = signal.savgol_filter(player_2_x, 3, 2)
+    # player_2_y = signal.savgol_filter(player_2_y, 3, 2)
+    # x = np.arange(0, len(player_2_y))
+    # indices = [i for i, val in enumerate(player_2_y) if np.isnan(val)]
+    # x = np.delete(x, indices)
+    # y1 = np.delete(player_2_y, indices)
+    # y2 = np.delete(player_2_x, indices)
+    # player_2_f_y = interp1d(x, y1, fill_value="extrapolate")
 
-    player_2_f_x = interp1d(x, y2, fill_value="extrapolate")
-    xnew = np.linspace(0, len(player_2_y), num=len(player_2_y), endpoint=True)
+    # player_2_f_x = interp1d(x, y2, fill_value="extrapolate")
+    # xnew = np.linspace(0, len(player_2_y), num=len(player_2_y), endpoint=True)
 
 
     # Find all peaks of the ball y index
@@ -154,6 +154,20 @@ def make_gif(video, frame_id, frame_count, tennis_tracking, player_mode, save_na
 
     print("start", start)
     print("end", range_)
+   
+
+    h_max = []
+    w_max = []
+
+    for i in range(range_):
+        bbox  = tennis_tracking[tennis_tracking['Frame']==start+i][player_mode].to_numpy()
+        if bbox[0][0] != None:
+            h_max.append(int(bbox[0][3] - bbox[0][1]))
+            w_max.append(int(bbox[0][2] - bbox[0][0]))
+
+    h_margin = max(h_max)//2
+    w_margin = max(w_max)//2
+
     video.set(cv2.CAP_PROP_POS_FRAMES, start)
 
     game_play = []
@@ -167,8 +181,11 @@ def make_gif(video, frame_id, frame_count, tennis_tracking, player_mode, save_na
                 if bbox[0][0] != None:
                     player = crop_players(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), bbox[0])
 
+                    box_center = center_of_box(bbox[0])
+                    player     = frame[int(box_center[1] - h_margin): int(box_center[1] + h_margin),
+                            int(box_center[0] - w_margin): int(box_center[0] + w_margin)].copy()
+
                     try:
-                        player = cv2.resize(player, (300, 400))
                         game_play.append(player)
 
                     except:
@@ -223,7 +240,7 @@ def find_csv_file_game(video_path, save_location):
 
         if ret:
             # detect
-            player_1, player_2, ball_pos = detect_player_ball(player_ball_model, frame.copy())
+            player_1, player_2, ball_pos,_ = detect_player_ball(player_ball_model, frame.copy())
             detection_model.player_1_boxes.append(player_1)
             detection_model.player_2_boxes.append(player_2)
 
@@ -307,10 +324,12 @@ if __name__=='__main__':
     vid_path = '/home/predator/Desktop/UPWORK/Tennis_tracking/tennis-tracking/event_detection_dataset'
     all_vid_paths = sorted(glob(f'{vid_path}/*.mp4') + glob(f'{vid_path}/*.mkv'))
     os.makedirs('action_recognition_player', exist_ok=True)
+
+    gif_save_loc = './action_recognition_player'
     for vid_path in tqdm(all_vid_paths[10:]):
 
         # try:
-        find_csv_file_game(vid_path)
+        find_csv_file_game(vid_path, gif_save_loc)
 
         # except:
         #     pass

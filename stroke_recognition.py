@@ -85,6 +85,7 @@ class ActionRecognition:
         self.box_margin = 20
         self.softmax = nn.Softmax(dim=1)
         self.strokes_label = ['Forehand', 'Backhand', 'Service/Smash']
+        self.player  = []
 
     def add_frame(self, frame, player_box):
         """
@@ -95,10 +96,12 @@ class ActionRecognition:
         box_center = center_of_box(player_box)
 
         if box_center[0]!=None:
+            
+            patch = frame[int(box_center[1] - 70): int(box_center[1] + 70),
+                    int(box_center[0] - 35): int(box_center[0] + 35)].copy()
 
-            patch = frame[int(box_center[1] - self.box_margin): int(box_center[1] + self.box_margin),
-                    int(box_center[0] - self.box_margin): int(box_center[0] + self.box_margin)].copy()
-
+            self.player.append(patch)
+            print("patch", patch.shape)
 
             patch = imutils.resize(patch, 299)
             frame_t = patch.transpose((2, 0, 1)) / 255
@@ -109,10 +112,11 @@ class ActionRecognition:
                 features = self.feature_extractor(frame_tensor)
 
             features = features.unsqueeze(1)
+
             # Concatenate the features to previous features
             if self.frames_features_seq is None:
                 self.frames_features_seq = features
-                print(features)
+                
             else:
                 self.frames_features_seq = torch.cat([self.frames_features_seq, features], dim=1)
 

@@ -33,20 +33,21 @@ def main():
     os.makedirs('ball_plots', exist_ok=True)
     os.makedirs('download', exist_ok=True)
     os.makedirs('game_output', exist_ok=True)
+    os.makedirs('GIF', exist_ok=True)
 
    
 
-    video_url = 'https://youtu.be/W_sbCKNWRaw'
+    video_url = 'https://youtu.be/oyxhHkOel2I?t=7'
     download_video_from_youtube(video_url, 'download/tennis_game')
     download_vid_path = glob("./download/*.webm")[0]
     
-    print(download_vid_path)
-    print("find_game_in_video")
+    # print(download_vid_path)
+    # print("find_game_in_video")
     find_game_in_video(vid_path=download_vid_path)
 
-    all_game = sorted(glob('./game_output/*.mp4'))
+    # all_game = sorted(glob('./game_output/*.mp4'))
     
-    for vid_path in all_game:
+    for vid_path in ['./testing_data/game_play_1.mp4']:
         print(vid_path)
         
         analyize_tennis_game(vid_path)

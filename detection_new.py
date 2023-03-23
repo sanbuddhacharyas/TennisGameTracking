@@ -1,6 +1,7 @@
 import os
 import time
 import math
+import imageio
 
 from PIL import Image, ImageDraw
 import tensorflow as tf
@@ -15,7 +16,7 @@ from scipy.signal import find_peaks
 from court_detection import CourtDetector
 
 from detection import DetectionModel, center_of_box
-from detect_players import detect_player_ball
+from detect_players import detect_player_ball, remove_court_backgroud
 
 from utils_ import get_video_properties, get_dtype, get_stickman_line_connection
 
@@ -59,7 +60,9 @@ def get_stroke_predictions(video_path, stroke_recognition, strokes_frames, playe
     predictions = {}
     cap = cv2.VideoCapture(video_path)
     fps, length, width, height = get_video_properties(cap)
-    video_length = 3
+    video_length = 2
+
+    print(fps, length)
     # For each stroke detected trim video part and predict stroke
     for frame_num in strokes_frames:
         # Trim the video (only relevant frames are taken)
@@ -77,6 +80,11 @@ def get_stroke_predictions(video_path, stroke_recognition, strokes_frames, playe
             i += 1
             if i == int(video_length * fps):
                 break
+
+        print("len_action", len(stroke_recognition.player))
+        imageio.mimsave(f'./GIF/{frame_num}.gif', stroke_recognition.player, fps=20)
+        stroke_recognition.player = []
+
         # predict the stroke
         probs, stroke = stroke_recognition.predict_saved_seq()
         predictions[frame_num] = {'probs': probs, 'stroke': stroke}
@@ -1297,7 +1305,7 @@ def analyize_tennis_game(video_path):
 
     court_detector    = CourtDetector()
     detection_model   = DetectionModel(dtype=dtype)
-    player_ball_model = YOLO('./weights/best.pt') 
+    player_ball_model = YOLO('./weights/player_court_net_best.pt') 
 
     stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
     ball_detector = BallDetector('./weights/model.3', out_channels=2)
@@ -1340,14 +1348,14 @@ def analyize_tennis_game(video_path):
             court_detector.track_court(frame)
 
             # detect
-            player_1, player_2, ball_pos = detect_player_ball(player_ball_model, frame.copy())
+            player_1, player_2, net_pos, court_pos = detect_player_ball(player_ball_model, frame.copy())
             detection_model.player_1_boxes.append(player_1)
             detection_model.player_2_boxes.append(player_2)
 
-            ball_pos_center = center_of_box(ball_pos)
-            ball_detector.detect_ball(court_detector.delete_extra_parts(frame), ball_pos_center)
+            # ball_pos_center = center_of_box(ball_pos)
+            ball_detector.detect_ball(court_detector.delete_extra_parts(frame))
 
-            yolo_ball_pos.append(ball_pos_center)
+            # yolo_ball_pos.append(ball_pos_center)
 
             total_time += (time.time() - start_time)
             print('Processing frame %d/%d  FPS %04f' % (frame_i, length, frame_i / total_time), '\r', end='')
@@ -1497,6 +1505,9 @@ def find_game_in_video(vid_path):
     # Load videos from videos path
     video = cv2.VideoCapture(vid_path)
 
+    player_ball_model = YOLO('./weights/player_court_net_best.pt') 
+
+
     # get videos properties
     fps, length, v_width, v_height = get_video_properties(video)
     game_play = 1
@@ -1512,40 +1523,61 @@ def find_game_in_video(vid_path):
      # Loop over all frames in the videos
     while True:
         ret, frame = video.read()
-        print("frame_i", frame_i)
         if ret:
             
-            if court_detection == False:
-                print("above_court")
-                court_detection, acc = temp_court.detect(frame)
-                print("Frame", frame_i, court_detection, acc)
-                if court_detection==False:
-                    frame_i += 1
-                    continue
-
-                else:
-                    print(math.isnan(acc))
-                    if (acc <= 90.0) or (acc==100.0) or math.isnan(acc):
-                        
-                        court_detection=False
+            player_1, player_2, net_pos, court_pos = detect_player_ball(player_ball_model, frame)
+            
+            
+            if (court_pos[0] != None) and (net_pos[0] != None):
+                img = remove_court_backgroud(frame.copy(), court_pos)
+                if court_detection == False:
+                    
+                    court_detection, acc = temp_court.detect(img)
+                    print("Frame", frame_i, court_detection, acc)
+                    if court_detection==False:
                         frame_i += 1
                         continue
 
-                    start_index = frame_i
-                    court_detection = True
-                    
-
-            if court_detection == True:
-                
-                try:
-                    track_court_status = temp_court.track_court(frame)
-
-                    if track_court_status:
-                        game_frame_holder.append(frame)
-                    
                     else:
+                    
+                        if (acc <= 90.0) or (acc==100.0) or math.isnan(acc):
+                            
+                            court_detection=False
+                            frame_i += 1
+                            continue
+
+                        start_index = frame_i
+                        court_detection = True
+                    
+
+                if court_detection == True:
+                    
+                    try:
+                        track_court_status = temp_court.track_court(img)
+
+                        if track_court_status:
+                            game_frame_holder.append(frame)
+                        
+                        else:
+                            print("length of game frame holder", len(game_frame_holder))
+                            if len(game_frame_holder) > 30:
+                    
+                                game_index.append([start_index, frame_i])
+                                out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
+                                    cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
+
+                                save_video(game_frame_holder, out)
+                                game_play += 1
+
+                            game_frame_holder = []
+                            court_detection   = False
+                            temp_court.frame_points = None
+
+
+                    except:
+                        print("Except, length of game frame holder", len(game_frame_holder))
                         if len(game_frame_holder) > 30:
-                
+                    
                             game_index.append([start_index, frame_i])
                             out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
                                 cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
@@ -1557,28 +1589,25 @@ def find_game_in_video(vid_path):
                         court_detection   = False
                         temp_court.frame_points = None
 
-                        break
 
-                except:
-                    if len(game_frame_holder) > 30:
+
+            # else:
+
+            #     if len(game_frame_holder) > 30:
                 
-                        game_index.append([start_index, frame_i])
-                        out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
-                            cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
+            #         game_index.append([start_index, frame_i])
+            #         out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
+            #             cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
 
-                        save_video(game_frame_holder, out)
-                        game_play += 1
+            #         save_video(game_frame_holder, out)
+            #         game_play += 1
 
-                    game_frame_holder = []
-                    court_detection   = False
-                    temp_court.frame_points = None
-
-                    break
+            #     game_frame_holder = []
+            #     court_detection   = False
+            #     temp_court.frame_points = None
 
 
             frame_i += 1
                     
         else:
             break
-
-    # return game_index, court_detection

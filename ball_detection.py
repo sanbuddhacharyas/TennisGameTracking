@@ -117,7 +117,7 @@ class BallDetector:
         else:
             return (None, None)
 
-    def detect_ball(self, frame, pre_ball_pos):
+    def detect_ball(self, frame):
         """
         After receiving 3 consecutive frames, the ball will be detected using TrackNet model
         :param frame: current frame
@@ -144,8 +144,8 @@ class BallDetector:
 
             x, y = self.keypoint_to_heatmap(heatmap)
 
-            if (x==None) or (y==None):
-                x, y = pre_ball_pos
+            # if (x==None) or (y==None):
+            #     x, y = pre_ball_pos
 
             if x is not None:
                 # Check distance from previous location and remove outliers
