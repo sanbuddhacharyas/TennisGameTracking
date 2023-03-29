@@ -16,7 +16,7 @@ from scipy.signal import find_peaks
 from court_detection import CourtDetector
 
 from detection import DetectionModel, center_of_box
-from detect_players import detect_player_ball, remove_court_backgroud
+from detect_players import detect_court_net, remove_court_backgroud
 
 from utils_ import get_video_properties, get_dtype, get_stickman_line_connection
 
@@ -265,9 +265,13 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
 
     # Find stroke for bottom player by thresholding the dists
     for peak in peaks:
+        if player_1_boxes[peak][0] == None:
+            continue
+
         player_box_height = max(player_1_boxes[peak][3]/v_height - player_1_boxes[peak][1]/v_height, 0.2)
 
         if dists[peak] != None:
+            print("peak", peak, "ball_difference", dists[peak], "player_ratio", (player_box_height * 4 / 5))
             if dists[peak] < (player_box_height * 4 / 5):
                 strokes_1_indices.append(peak)
 
@@ -1341,14 +1345,15 @@ def analyize_tennis_game(video_path):
         frame_i += 1
 
         if ret:
+            player_1, player_2, court_pos, net_pos = detect_court_net(player_ball_model, frame.copy())
+            backgroud_removed = remove_court_backgroud(frame, court_pos)
             if frame_i==1:
-                court_detector.detect(frame)
+                
+                court_detector.detect(backgroud_removed)
             
 
-            court_detector.track_court(frame)
+            court_detector.track_court(backgroud_removed)
 
-            # detect
-            player_1, player_2, net_pos, court_pos = detect_player_ball(player_ball_model, frame.copy())
             detection_model.player_1_boxes.append(player_1)
             detection_model.player_2_boxes.append(player_2)
 
@@ -1373,14 +1378,14 @@ def analyize_tennis_game(video_path):
     vid_name  = video_path.split('/')[-1].split('.')[0]
     np.save(f'./ball_npy/{vid_name}.npy', ball_detector.xy_coordinates)
 
-    plt.plot(ball_detector.xy_coordinates[:,1])
-    plt.savefig('./ball_plots/before_filtered.jpg')
-    plt.cla()
+    # plt.plot(ball_detector.xy_coordinates[:,1])
+    # plt.savefig('./ball_plots/before_filtered.jpg')
+    # plt.cla()
 
 
-    plt.plot(np.array(yolo_ball_pos)[:,1])
-    plt.savefig('./ball_plots/yolo_ball_pos.jpg')
-    plt.cla()
+    # plt.plot(np.array(yolo_ball_pos)[:,1])
+    # plt.savefig('./ball_plots/yolo_ball_pos.jpg')
+    # plt.cla()
 
 
 
@@ -1525,14 +1530,15 @@ def find_game_in_video(vid_path):
         ret, frame = video.read()
         if ret:
             
-            player_1, player_2, net_pos, court_pos = detect_player_ball(player_ball_model, frame)
+            player_1, player_2, court_pos, net_pos = detect_court_net(player_ball_model, frame)
             
             
             if (court_pos[0] != None) and (net_pos[0] != None):
-                img = remove_court_backgroud(frame.copy(), court_pos)
+                backgroud_removed = remove_court_backgroud(frame, court_pos)
+                # img = remove_court_backgroud(frame.copy(), court_pos)
                 if court_detection == False:
                     
-                    court_detection, acc = temp_court.detect(img)
+                    court_detection, acc = temp_court.detect(backgroud_removed)
                     print("Frame", frame_i, court_detection, acc)
                     if court_detection==False:
                         frame_i += 1
@@ -1553,7 +1559,7 @@ def find_game_in_video(vid_path):
                 if court_detection == True:
                     
                     try:
-                        track_court_status = temp_court.track_court(img)
+                        track_court_status = temp_court.track_court(backgroud_removed)
 
                         if track_court_status:
                             game_frame_holder.append(frame)
