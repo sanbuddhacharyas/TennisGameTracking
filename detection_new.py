@@ -410,9 +410,11 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
 
     fps, length, width, height = get_video_properties(cap)
 
+    output_file = output_file.replace('.mp4', '.webm')
+    print("output_file", output_file)
     # Video writer
-    out = cv2.VideoWriter(os.path.join(output_folder, output_file + '.mp4'),
-                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (final_width, height))
+    out = cv2.VideoWriter(os.path.join(output_folder, output_file),
+                          cv2.VideoWriter_fourcc(*'vp90'), fps, (final_width, height))
 
     # initialize frame counters
     frame_number = 0
@@ -1301,7 +1303,7 @@ def save_video(frames, vid_out):
     vid_out.release()
 
 
-def analyize_tennis_game(video_path):
+def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
     dtype = get_dtype()
 
     print("video_path", video_path)
@@ -1319,6 +1321,11 @@ def analyize_tennis_game(video_path):
 
     # get videos properties
     fps, length, v_width, v_height = get_video_properties(video)
+
+    increment_step = (one_game_segment - 5) / length
+
+    print("one_game_segment", one_game_segment)
+    print("increment_step", increment_step)
 
     blank_img   =  ((np.ones((v_height, v_width, 3)))*255).astype(np.uint8)
 
@@ -1366,6 +1373,9 @@ def analyize_tennis_game(video_path):
             print('Processing frame %d/%d  FPS %04f' % (frame_i, length, frame_i / total_time), '\r', end='')
             if not frame_i % 100:
                 print('')
+
+            completed = completed + increment_step
+            my_bar.progress(int(completed), text=f'Analyzing Video {ind}, Please wait...')
 
             # if frame_i > 100:
             #     break
@@ -1504,6 +1514,7 @@ def analyize_tennis_game(video_path):
 
     # tennis_tracking = tennis_tracking[['Time','Frame','Player_Near_End_Pos','Player_Far_End_Pos','Ball_POS', 'Ball_bounced', 'Stroke_by', 'Stroke_Type','Ball_Bounce_Outcome']]
     tennis_tracking.to_excel(f"./CSV/{output_file.replace('.mp4', '.xlsx')}", index = False)
+    my_bar.progress(int(completed), text=f'Analyzing Video Completed')
 
 def find_game_in_video(vid_path):
 
@@ -1579,6 +1590,8 @@ def find_game_in_video(vid_path):
                             court_detection   = False
                             temp_court.frame_points = None
 
+                            break
+
 
                     except:
                         print("Except, length of game frame holder", len(game_frame_holder))
@@ -1594,6 +1607,8 @@ def find_game_in_video(vid_path):
                         game_frame_holder = []
                         court_detection   = False
                         temp_court.frame_points = None
+
+                        break
 
 
 
