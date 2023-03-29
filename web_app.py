@@ -28,12 +28,12 @@ GAME SET MATH {
 </style>
 """
 
-try:
-    shutil.rmtree('download')
-    shutil.rmtree('game_output')
+# try:
+#     shutil.rmtree('download')
+#     shutil.rmtree('game_output')
 
-except:
-    pass
+# except:
+#     pass
 
 os.makedirs('videos', exist_ok=True)
 os.makedirs('output', exist_ok=True)
@@ -44,8 +44,8 @@ os.makedirs('download', exist_ok=True)
 os.makedirs('game_output', exist_ok=True)
 os.makedirs('GIF', exist_ok=True)
 
-st.markdown("<h1 style='text-align: center; color: white;'>GAME SET MATH &#129358</h1>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align: center; color: white;'>Tennis Game Analysis </h2>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: black;'>GAME SET MATH &#129358</h1>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: black;'>Tennis Game Analysis </h2>", unsafe_allow_html=True)
 
 # st.markdown(title_alignment, unsafe_allow_html=True)
 # st.title("GAME SET MATH :tennis:")
@@ -65,7 +65,7 @@ if url != '':
     completed = 0
     progress_text = "Downloading Video Please wait."
     my_bar = st.progress(completed, text=progress_text)
-    download_video_from_youtube(url, 'download/tennis_game')
+    # download_video_from_youtube(url, 'download/tennis_game')
 
     for percent_complete in range(10):
         time.sleep(0.5)
@@ -74,9 +74,9 @@ if url != '':
 
     my_bar.progress(completed, text='Segmenting Game From the Video...')
 
-    download_vid_path = glob("./download/*.webm")[0]
+    # download_vid_path = glob("./download/*.webm")[0]
  
-    find_game_in_video(vid_path=download_vid_path)
+    # find_game_in_video(vid_path=download_vid_path)
     for percent_complete in range(10):
         time.sleep(0.7)
         completed += 1
@@ -86,9 +86,10 @@ if url != '':
     all_game = sorted(glob('./game_output/*.mp4'))
 
     total_games       = len(all_game)
+    total_games       = 1
     one_game_segment  = (100 - completed)//total_games
 
-    for ind, vid_path in enumerate(all_game):
+    for ind, vid_path in enumerate(['./testing_data/Q0Vli051yX.mp4']):
 
         analyize_tennis_game(vid_path, my_bar, ind, one_game_segment, completed)
         
