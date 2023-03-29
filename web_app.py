@@ -86,10 +86,9 @@ if url != '':
     all_game = sorted(glob('./game_output/*.mp4'))
 
     total_games       = len(all_game)
-    total_games       = 1
     one_game_segment  = (100 - completed)//total_games
 
-    for ind, vid_path in enumerate(['./testing_data/Q0Vli051yX.mp4']):
+    for ind, vid_path in enumerate(all_game):
 
         analyize_tennis_game(vid_path, my_bar, ind, one_game_segment, completed)
         
