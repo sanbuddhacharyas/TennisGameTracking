@@ -65,7 +65,7 @@ if url != '':
     completed = 0
     progress_text = "Downloading Video Please wait."
     my_bar = st.progress(completed, text=progress_text)
-    # download_video_from_youtube(url, 'download/tennis_game')
+    download_video_from_youtube(url, 'download/tennis_game')
 
     for percent_complete in range(10):
         time.sleep(0.5)
@@ -74,9 +74,9 @@ if url != '':
 
     my_bar.progress(completed, text='Segmenting Game From the Video...')
 
-    # download_vid_path = glob("./download/*.webm")[0]
+    download_vid_path = glob("./download/*.webm")[0]
  
-    # find_game_in_video(vid_path=download_vid_path)
+    find_game_in_video(vid_path=download_vid_path)
     for percent_complete in range(10):
         time.sleep(0.7)
         completed += 1
