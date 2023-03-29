@@ -28,12 +28,12 @@ GAME SET MATH {
 </style>
 """
 
-# try:
-#     shutil.rmtree('download')
-#     shutil.rmtree('game_output')
+try:
+    shutil.rmtree('download')
+    shutil.rmtree('game_output')
 
-# except:
-#     pass
+except:
+    pass
 
 os.makedirs('videos', exist_ok=True)
 os.makedirs('output', exist_ok=True)
