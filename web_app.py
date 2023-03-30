@@ -28,12 +28,12 @@ GAME SET MATH {
 </style>
 """
 
-try:
-    shutil.rmtree('download')
-    shutil.rmtree('game_output')
+# try:
+#     shutil.rmtree('download')
+#     shutil.rmtree('game_output')
 
-except:
-    pass
+# except:
+#     pass
 
 os.makedirs('videos', exist_ok=True)
 os.makedirs('output', exist_ok=True)
@@ -47,19 +47,21 @@ os.makedirs('GIF', exist_ok=True)
 st.markdown("<h1 style='text-align: center; color: black;'>GAME SET MATH &#129358</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align: center; color: black;'>Tennis Game Analysis </h2>", unsafe_allow_html=True)
 
-# st.markdown(title_alignment, unsafe_allow_html=True)
-# st.title("GAME SET MATH :tennis:")
-# st.header("Tennis Game Analysis")
+
 show_file = st.empty()
 show_file.image('./image/tennis_wallpaper.jpg')
 
-# st.markdown(STYLE, unsafe_allow_html=True)
 
 if 'widget_key' not in st.session_state:
     st.session_state.widget_key = str(randint(1000, 100000000))
           
+col1, col2 = st.columns([1,1])
 
-url = st.text_input("Insert YouTube URL", key= st.session_state.widget_key)
+with col1:
+    num_game_play = st.text_input("Number of game play")
+
+with col2:
+    url = st.text_input("Insert YouTube URL", key= st.session_state.widget_key)
 
 if url != '':
     completed = 0
@@ -75,8 +77,16 @@ if url != '':
     my_bar.progress(completed, text='Segmenting Game From the Video...')
 
     download_vid_path = glob("./download/*.webm")[0]
- 
-    find_game_in_video(vid_path=download_vid_path)
+
+    print('num_game_play', num_game_play)
+    if num_game_play == '':
+        num_game_play = 1
+    
+    else:
+        num_game_play = int(num_game_play)
+
+
+    find_game_in_video(download_vid_path, num_game_play)
     for percent_complete in range(10):
         time.sleep(0.7)
         completed += 1
@@ -92,30 +102,30 @@ if url != '':
 
         analyize_tennis_game(vid_path, my_bar, ind, one_game_segment, completed)
         
-        video_file = open('./output/game_play_1.webm', 'rb')
+        vid_name    = vid_path.split('/')[-1].split('.')[0]
+        video_file  = open(f'./output/{vid_name}.webm', 'rb')
         video_bytes = video_file.read()
         st.video(video_bytes)
 
         col1, col2 = st.columns([1,1])
         with col1:
-            with open('./output/game_play_1.webm', "rb") as file:
+            with open(f'./output/{vid_name}.webm', "rb") as file:
                         btn = st.download_button(
                                 label="Download Video",
                                 data=file,
-                                file_name='game_play_1.webm',
+                                file_name=f'{vid_name}.webm',
                                 on_click = get_state
                             )
 
         with col2:
-            with open('./CSV/game_play_1.xlsx', "rb") as file:
+            with open(f'./CSV/{vid_name}.xlsx', "rb") as file:
                         btn = st.download_button(
                                 label="Download Excel File",
                                 data=file,
-                                file_name='game_play_1.xlsx',
+                                file_name=f'{vid_name}.xlsx',
                                 on_click = get_state
                             )
-     
-        break  
+       
 
     url = ''  
         # except:

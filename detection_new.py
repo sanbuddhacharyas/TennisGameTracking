@@ -40,6 +40,8 @@ from court_detection import CourtDetector
 from utils_ import  get_video_properties, get_dtype
 from detection import DetectionModel
 
+from stroke_prediction import get_stroke_predictions
+
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
     try:
@@ -53,43 +55,43 @@ if gpus:
         print(e)
         
 
-def get_stroke_predictions(video_path, stroke_recognition, strokes_frames, player_boxes):
-    """
-    Get the stroke prediction for all sections where we detected a stroke
-    """
-    predictions = {}
-    cap = cv2.VideoCapture(video_path)
-    fps, length, width, height = get_video_properties(cap)
-    video_length = 2
+# def get_stroke_predictions(video_path, stroke_recognition, strokes_frames, player_boxes):
+#     """
+#     Get the stroke prediction for all sections where we detected a stroke
+#     """
+#     predictions = {}
+#     cap = cv2.VideoCapture(video_path)
+#     fps, length, width, height = get_video_properties(cap)
+#     video_length = 2
 
-    print(fps, length)
-    # For each stroke detected trim video part and predict stroke
-    for frame_num in strokes_frames:
-        # Trim the video (only relevant frames are taken)
-        starting_frame = max(0, frame_num - int(video_length * fps * 2 / 3))
-        cap.set(1, starting_frame)
-        i = 0
+#     print(fps, length)
+#     # For each stroke detected trim video part and predict stroke
+#     for frame_num in strokes_frames:
+#         # Trim the video (only relevant frames are taken)
+#         starting_frame = max(0, frame_num - int(video_length * fps * 2 / 3))
+#         cap.set(1, starting_frame)
+#         i = 0
 
-        while True:
-            ret, frame = cap.read()
+#         while True:
+#             ret, frame = cap.read()
 
-            if not ret:
-                break
+#             if not ret:
+#                 break
 
-            stroke_recognition.add_frame(frame, player_boxes[starting_frame + i])
-            i += 1
-            if i == int(video_length * fps):
-                break
+#             stroke_recognition.add_frame(frame, player_boxes[starting_frame + i])
+#             i += 1
+#             if i == int(video_length * fps):
+#                 break
 
-        print("len_action", len(stroke_recognition.player))
-        imageio.mimsave(f'./GIF/{frame_num}.gif', stroke_recognition.player, fps=20)
-        stroke_recognition.player = []
+#         print("len_action", len(stroke_recognition.player))
+#         imageio.mimsave(f'./GIF/{frame_num}.gif', stroke_recognition.player, fps=20)
+#         stroke_recognition.player = []
 
-        # predict the stroke
-        probs, stroke = stroke_recognition.predict_saved_seq()
-        predictions[frame_num] = {'probs': probs, 'stroke': stroke}
-    cap.release()
-    return predictions
+#         # predict the stroke
+#         probs, stroke = stroke_recognition.predict_saved_seq()
+#         predictions[frame_num] = {'probs': probs, 'stroke': stroke}
+#     cap.release()
+#     return predictions
 
 def ball_trajectory_filter(ball_positions):
 
@@ -1313,7 +1315,7 @@ def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
     detection_model   = DetectionModel(dtype=dtype)
     player_ball_model = YOLO('./weights/player_court_net_best.pt') 
 
-    stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
+    # stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
     ball_detector = BallDetector('./weights/model.3', out_channels=2)
     point_detection_model = tf.keras.models.load_model('./bouncing_point_detection.h5')
 
@@ -1343,6 +1345,8 @@ def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
     bounced_model.build(input_shape=(None, img_size[0], img_size[1], 1))
     bounced_model.load_weights('./bounce_model.h5')
 
+    stroke_model = tf.keras.models.load_model('./checkpoints/stroke_classification.h5')
+   
     yolo_ball_pos = []
     
 
@@ -1461,10 +1465,10 @@ def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
     tennis_tracking = fill_tennis_status(court_detector, detection_model, coords, fps, tennis_tracking)
 
 
-    predictions_1 = get_stroke_predictions(video_path, stroke_recognition,
+    predictions_1 = get_stroke_predictions(video_path, stroke_model,
                                          player_1_strokes_indices, detection_model.player_1_boxes)
 
-    predictions_2 = get_stroke_predictions(video_path, stroke_recognition,
+    predictions_2 = get_stroke_predictions(video_path, stroke_model,
                                          player_2_strokes_indices, detection_model.player_2_boxes)
 
     print(predictions_1)
@@ -1516,7 +1520,7 @@ def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
     tennis_tracking.to_excel(f"./CSV/{output_file.replace('.mp4', '.xlsx')}", index = False)
     my_bar.progress(int(completed), text=f'Analyzing Video Completed')
 
-def find_game_in_video(vid_path):
+def find_game_in_video(vid_path, num_games = 1):
 
     # Load videos from videos path
     video = cv2.VideoCapture(vid_path)
@@ -1589,8 +1593,8 @@ def find_game_in_video(vid_path):
                             game_frame_holder = []
                             court_detection   = False
                             temp_court.frame_points = None
-
-                            break
+                            if game_play > num_games:
+                                break
 
 
                     except:
@@ -1608,7 +1612,8 @@ def find_game_in_video(vid_path):
                         court_detection   = False
                         temp_court.frame_points = None
 
-                        break
+                        if game_play > num_games:
+                            break
 
 
 
