@@ -100,31 +100,34 @@ if url != '':
 
     for ind, vid_path in enumerate(all_game):
 
-        analyize_tennis_game(vid_path, my_bar, ind, one_game_segment, completed)
-        
-        vid_name    = vid_path.split('/')[-1].split('.')[0]
-        video_file  = open(f'./output/{vid_name}.webm', 'rb')
-        video_bytes = video_file.read()
-        st.video(video_bytes)
+        try:
+            analyize_tennis_game(vid_path, my_bar, ind, one_game_segment, completed)
+            
+            vid_name    = vid_path.split('/')[-1].split('.')[0]
+            video_file  = open(f'./output/{vid_name}.webm', 'rb')
+            video_bytes = video_file.read()
+            st.video(video_bytes)
 
-        col1, col2 = st.columns([1,1])
-        with col1:
-            with open(f'./output/{vid_name}.webm', "rb") as file:
-                        btn = st.download_button(
-                                label="Download Video",
-                                data=file,
-                                file_name=f'{vid_name}.webm',
-                                on_click = get_state
-                            )
+            col1, col2 = st.columns([1,1])
+            with col1:
+                with open(f'./output/{vid_name}.webm', "rb") as file:
+                            btn = st.download_button(
+                                    label="Download Video",
+                                    data=file,
+                                    file_name=f'{vid_name}.webm',
+                                    on_click = get_state
+                                )
 
-        with col2:
-            with open(f'./CSV/{vid_name}.xlsx', "rb") as file:
-                        btn = st.download_button(
-                                label="Download Excel File",
-                                data=file,
-                                file_name=f'{vid_name}.xlsx',
-                                on_click = get_state
-                            )
+            with col2:
+                with open(f'./CSV/{vid_name}.xlsx', "rb") as file:
+                            btn = st.download_button(
+                                    label="Download Excel File",
+                                    data=file,
+                                    file_name=f'{vid_name}.xlsx',
+                                    on_click = get_state
+                                )
+        except:
+            continue
        
 
     url = ''  
