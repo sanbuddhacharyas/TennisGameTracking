@@ -85,7 +85,6 @@ if url != '':
     else:
         num_game_play = int(num_game_play)
 
-    num_game_play = 1
     find_game_in_video(download_vid_path, num_game_play)
     for percent_complete in range(10):
         time.sleep(0.7)
