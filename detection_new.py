@@ -1305,7 +1305,7 @@ def save_video(frames, vid_out):
     vid_out.release()
 
 
-def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
+def analyize_tennis_game(video_path, my_bar, ind, total_seg, one_game_segment, completed):
     dtype = get_dtype()
 
     print("video_path", video_path)
@@ -1379,7 +1379,7 @@ def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
                 print('')
 
             completed = completed + increment_step
-            my_bar.progress(int(completed), text=f'Analyzing Video {ind}, Please wait...')
+            my_bar.progress(int(completed), text=f'Analyzing Video {ind+1}/{total_seg}, Please wait...')
 
             # if frame_i > 100:
             #     break
@@ -1518,7 +1518,9 @@ def analyize_tennis_game(video_path, my_bar, ind, one_game_segment, completed):
 
     # tennis_tracking = tennis_tracking[['Time','Frame','Player_Near_End_Pos','Player_Far_End_Pos','Ball_POS', 'Ball_bounced', 'Stroke_by', 'Stroke_Type','Ball_Bounce_Outcome']]
     tennis_tracking.to_excel(f"./CSV/{output_file.replace('.mp4', '.xlsx')}", index = False)
-    my_bar.progress(int(completed), text=f'Analyzing Video Completed')
+
+    
+    
 
 def find_game_in_video(vid_path, num_games = 1):
 

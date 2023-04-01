@@ -2,6 +2,7 @@ import streamlit as st
 import time
 import shutil
 import os
+import zipfile
 
 from random import randint
 from glob import glob
@@ -31,6 +32,9 @@ GAME SET MATH {
 try:
     shutil.rmtree('download')
     shutil.rmtree('game_output')
+    shutil.rmtree('output')
+    shutil.rmtree('GIF')
+    shutil.rmtree('CSV')
 
 except:
     pass
@@ -96,39 +100,42 @@ if url != '':
 
     total_games       = len(all_game)
     one_game_segment  = (100 - completed)//total_games
+    comp_init         = completed
 
     for ind, vid_path in enumerate(all_game):
 
         try:
-            analyize_tennis_game(vid_path, my_bar, ind, one_game_segment, completed)
+            analyize_tennis_game(vid_path, my_bar, ind, total_games, one_game_segment, completed)
             
+            completed = (ind + 1) * one_game_segment + comp_init
+            my_bar.progress(int(completed), text=f'Analyzing Video Completed')
             vid_name    = vid_path.split('/')[-1].split('.')[0]
             video_file  = open(f'./output/{vid_name}.webm', 'rb')
             video_bytes = video_file.read()
             st.video(video_bytes)
 
             col1, col2 = st.columns([1,1])
-            with col1:
-                with open(f'./output/{vid_name}.webm', "rb") as file:
-                            btn = st.download_button(
-                                    label="Download Video",
-                                    data=file,
-                                    file_name=f'{vid_name}.webm',
-                                    on_click = get_state
-                                )
-
-            with col2:
-                with open(f'./CSV/{vid_name}.xlsx', "rb") as file:
-                            btn = st.download_button(
-                                    label="Download Excel File",
-                                    data=file,
-                                    file_name=f'{vid_name}.xlsx',
-                                    on_click = get_state
-                                )
+        
         except:
             continue
-       
 
+    my_bar.progress(int(100), text=f'Analyzing Video Completed, Please download the files')
+
+    all_output = glob('./output/*') + glob('./CSV/*') + glob('./GIF/*')
+    with zipfile.ZipFile('./output/all_files.zip', mode='w') as archive:
+        for file_name in all_output:
+            archive.write(file_name)
+
+
+    with open('./output/all_files.zip', "rb") as file:
+        btn = st.download_button(
+                label="Download files",
+                data=file,
+                file_name=f'all_files.zip',
+                on_click = get_state
+            )
+
+    
     url = ''  
         # except:
         #     pass
