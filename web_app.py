@@ -7,11 +7,18 @@ import zipfile
 from random import randint
 from glob import glob
 
-from detection_new import analyize_tennis_game, find_game_in_video
-from video_downloader import download_video, download_video_from_youtube
+from detection_new import analyize_tennis_game, find_game_in_video, create_final_results
+from video_downloader import download_video_from_youtube
+
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 
 def get_state():
     st.session_state.widget_key = str(randint(1000, 100000000))
+
+
+
 
 STYLE = """
 <style>
@@ -89,7 +96,7 @@ if url != '':
     else:
         num_game_play = int(num_game_play)
 
-    find_game_in_video(download_vid_path, num_game_play)
+    fps = find_game_in_video(download_vid_path, num_game_play)
     for percent_complete in range(10):
         time.sleep(0.7)
         completed += 1
@@ -104,30 +111,33 @@ if url != '':
 
     for ind, vid_path in enumerate(all_game):
 
-        try:
-            analyize_tennis_game(vid_path, my_bar, ind, total_games, one_game_segment, completed)
-            
-            completed = (ind + 1) * one_game_segment + comp_init
-            my_bar.progress(int(completed), text=f'Analyzing Video Completed')
-            vid_name    = vid_path.split('/')[-1].split('.')[0]
-            video_file  = open(f'./output/{vid_name}.webm', 'rb')
-            video_bytes = video_file.read()
-            st.video(video_bytes)
-
-            col1, col2 = st.columns([1,1])
+        # try:
+        analyize_tennis_game(vid_path, my_bar, ind, total_games, one_game_segment, completed)
         
-        except:
-            continue
+        # completed = (ind + 1) * one_game_segment + comp_init
+        # my_bar.progress(int(completed), text=f'Analyzing Video {ind+1}/{total_games}, Please wait...')
+        vid_name    = vid_path.split('/')[-1].split('.')[0]
+        video_file  = open(f'./output/{vid_name}.webm', 'rb')
+        video_bytes = video_file.read()
+        st.video(video_bytes)
 
-    my_bar.progress(int(100), text=f'Analyzing Video Completed, Please download the files')
+        col1, col2 = st.columns([1,1])
+        
+        # except:
+        #     continue
+
+    # Create final excel sheet
+    create_final_results(fps)
+
+    my_bar.progress(int(100), text=f'Completed, Please download the files')
 
     all_output = glob('./output/*') + glob('./CSV/*') + glob('./GIF/*')
-    with zipfile.ZipFile('./output/all_files.zip', mode='w') as archive:
+    with zipfile.ZipFile('./all_files.zip', mode='w') as archive:
         for file_name in all_output:
             archive.write(file_name)
 
 
-    with open('./output/all_files.zip', "rb") as file:
+    with open('./all_files.zip', "rb") as file:
         btn = st.download_button(
                 label="Download files",
                 data=file,
@@ -135,8 +145,9 @@ if url != '':
                 on_click = get_state
             )
 
-    
+    create_final_results(30)
     url = ''  
+    
         # except:
         #     pass
 

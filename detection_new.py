@@ -31,14 +31,14 @@ import imutils
 from pickle import load
 from tennis_bounce import create_model, segment_ball_trajectory, find_bouncing_point, keypoint_to_heatmap
 
-from pose import PoseExtractor
-from smooth import Smooth
+
 from ball_detection import BallDetector
 from statistics_ import Statistics
-from stroke_recognition import ActionRecognition
 from court_detection import CourtDetector
 from utils_ import  get_video_properties, get_dtype
 from detection import DetectionModel
+
+from glob import glob
 
 from stroke_prediction import get_stroke_predictions
 
@@ -53,45 +53,6 @@ if gpus:
     except RuntimeError as e:
         # Memory growth must be set before GPUs have been initialized
         print(e)
-        
-
-# def get_stroke_predictions(video_path, stroke_recognition, strokes_frames, player_boxes):
-#     """
-#     Get the stroke prediction for all sections where we detected a stroke
-#     """
-#     predictions = {}
-#     cap = cv2.VideoCapture(video_path)
-#     fps, length, width, height = get_video_properties(cap)
-#     video_length = 2
-
-#     print(fps, length)
-#     # For each stroke detected trim video part and predict stroke
-#     for frame_num in strokes_frames:
-#         # Trim the video (only relevant frames are taken)
-#         starting_frame = max(0, frame_num - int(video_length * fps * 2 / 3))
-#         cap.set(1, starting_frame)
-#         i = 0
-
-#         while True:
-#             ret, frame = cap.read()
-
-#             if not ret:
-#                 break
-
-#             stroke_recognition.add_frame(frame, player_boxes[starting_frame + i])
-#             i += 1
-#             if i == int(video_length * fps):
-#                 break
-
-#         print("len_action", len(stroke_recognition.player))
-#         imageio.mimsave(f'./GIF/{frame_num}.gif', stroke_recognition.player, fps=20)
-#         stroke_recognition.player = []
-
-#         # predict the stroke
-#         probs, stroke = stroke_recognition.predict_saved_seq()
-#         predictions[frame_num] = {'probs': probs, 'stroke': stroke}
-#     cap.release()
-#     return predictions
 
 def ball_trajectory_filter(ball_positions):
 
@@ -141,7 +102,7 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
 
     (ball_filter_x, ball_filter_y, ball_f2_x, ball_f2_y) = ball_filtered
 
-    event_classifier = tf.keras.models.load_model('./weights/cp.h5')
+    event_classifier = tf.keras.models.load_model('./weights/cp_event_classification_40.h5')
 
     # Player 2 position interpolation
     player_2_centers = np.array([center_of_box(box) for box in player_2_boxes])
@@ -212,14 +173,21 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
         if (p==1) and (prob>0.8):
             bounces_ind.append(i)
 
-        elif p==3 and prob>0.8:
+        elif (p==3) and (prob>0.8):
             bounces_ind.append(i)
 
-        elif p==2 and prob>0.8:
+        elif (p==2) and (prob>0.8):
             peaks.append(i)
 
-        elif p==4 and prob>0.9:
-            neg_peaks.append(i)
+        elif p==4:
+            if (len(neg_peaks) == 0):
+                if (prob>=0.7):
+                    neg_peaks.append(i)
+
+            else:
+                if prob>=0.9:
+                    neg_peaks.append(i)
+
 
 
     dists = []
@@ -269,12 +237,9 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
     for peak in peaks:
         if player_1_boxes[peak][0] == None:
             continue
-
-        player_box_height = max(player_1_boxes[peak][3]/v_height - player_1_boxes[peak][1]/v_height, 0.2)
-
+        print("Peaks", peak, dists[peak])
         if dists[peak] != None:
-            print("peak", peak, "ball_difference", dists[peak], "player_ratio", (player_box_height * 4 / 5))
-            if dists[peak] < (player_box_height * 4 / 5):
+            if dists[peak] < 0.15:
                 strokes_1_indices.append(peak)
 
     strokes_2_indices = []
@@ -282,8 +247,9 @@ def find_strokes_indices(player_1_boxes, player_2_boxes, ball_filtered, bounces_
 
     # Find stroke for top player by thresholding the dists
     for peak in neg_peaks:
+        print("Neg_Peaks", peak, dists[peak])
         if dists2[peak] != None:
-            if dists2[peak] < 0.15:
+            if dists2[peak] < 0.20:
                 strokes_2_indices.append(peak)
           
                 # if (transformed[0]>0) and (transformed[1]>0):
@@ -376,9 +342,8 @@ def merge(frame, mini_img):
 
     return frame 
 
-def add_data_to_video(input_video, court_detector, players_detector, ball_detector, strokes_predictions_1, strokes_predictions_2, skeleton_df,
-                      statistics,
-                      show_video, with_frame, output_folder, output_file, p1, p2, f_x, f_y):
+def add_data_to_video(input_video, court_detector, players_detector, strokes_predictions_1, strokes_predictions_2, skeleton_df,
+                      statistics, with_frame, output_folder, output_file, completed, one_game_segment, my_bar, vid_ind):
     """
     Creates new videos with pose stickman, face landmarks and blinks counter
     :param input_video: str, path to the input videos
@@ -418,9 +383,14 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
     out = cv2.VideoWriter(os.path.join(output_folder, output_file),
                           cv2.VideoWriter_fourcc(*'vp90'), fps, (final_width, height))
 
+    num_per_seg = (20 + one_game_segment*(vid_ind+1) - completed) / length
+
+    print("rem", one_game_segment*(vid_ind+1), "completed", completed, "num_per_seg", num_per_seg)
+
     # initialize frame counters
     frame_number = 0
     orig_frame = 0
+
     while True:
         orig_frame += 1
         print('Creating new videos frame %d/%d  ' % (orig_frame, length), '\r', end='')
@@ -445,13 +415,6 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
         img_no_frame = mark_player_box(img_no_frame, player1_boxes, frame_number)
         img_no_frame = mark_player_box(img_no_frame, player2_boxes, frame_number)
 
-        # add ball location
-        # img = ball_detector.mark_positions(img, frame_num=frame_number)
-        # img_no_frame = ball_detector.mark_positions(img_no_frame, frame_num=frame_number, ball_color='black')
-
-        # add pose stickman
-        # if skeleton_df is not None:
-        #     img, img_no_frame = mark_skeleton(skeleton_df, img, img_no_frame, frame_number)
 
         # Add stroke prediction
         for i in range(-10, 10):
@@ -482,17 +445,7 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
                 break
-        # # Add stroke detected
-        # for i in range(-5, 10):
-        #     '''if frame_number + i in p1:
-        #         cv2.putText(img, 'Stroke detected', (int(player1_boxes[frame_number][0]) - 10, int(player1_boxes[frame_number][1]) - 10),
-        #                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255) if i != 0 else (255, 0, 0), 2)'''
-
-        #     if frame_number + i in p2:
-        #         cv2.putText(img, 'Stroke detected',
-        #                     (int(f_x(frame_number)) - 30, int(f_y(frame_number)) - 50),
-        #                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255) if i != 0 else (255, 0, 0), 2)
-
+       
         cv2.putText(img, 'Distance: {:.2f} m'.format(player1_dists[frame_number] / 100),
                     (50, 500),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
@@ -500,12 +453,6 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
                     (100, 150),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
-
-        # # display frame
-        # if show_video:
-        #     cv2.imshow('Output', img)
-        #     if cv2.waitKey(1) & 0xff == 27:
-        #         cv2.destroyAllWindows()
 
         # save output videos
         if with_frame == 0:
@@ -518,7 +465,11 @@ def add_data_to_video(input_video, court_detector, players_detector, ball_detect
 
         final_frame = merge(final_frame, min_img)
         out.write(final_frame)
+
+        completed = completed + num_per_seg
+        my_bar.progress(int(completed), text=f'Saving Video {vid_ind+1}, Please wait...')
         frame_number += 1
+
     print('Creating new video frames %d/%d  ' % (length, length), '\n', end='')
     print(f'New videos created, file name - {output_file}.avi')
     cap.release()
@@ -1316,7 +1267,7 @@ def analyize_tennis_game(video_path, my_bar, ind, total_seg, one_game_segment, c
     player_ball_model = YOLO('./weights/player_court_net_best.pt') 
 
     # stroke_recognition = ActionRecognition('storke_classifier_weights.pth')
-    ball_detector = BallDetector('./weights/model.3', out_channels=2)
+    ball_detector         = BallDetector('./weights/model.3', out_channels=2)
     point_detection_model = tf.keras.models.load_model('./bouncing_point_detection.h5')
 
     tennis_tracking = pd.DataFrame(columns=["Time", "Frame", "Player_Near_End_Pos", "Player_Far_End_Pos", "Ball_POS", "Ball_bounced", "Stroke_by", "Stroke_Type", "Ball_predict_point"])
@@ -1356,22 +1307,23 @@ def analyize_tennis_game(video_path, my_bar, ind, total_seg, one_game_segment, c
         frame_i += 1
 
         if ret:
+
             player_1, player_2, court_pos, net_pos = detect_court_net(player_ball_model, frame.copy())
             backgroud_removed = remove_court_backgroud(frame, court_pos)
+          
             if frame_i==1:
                 
                 court_detector.detect(backgroud_removed)
             
 
+           
             court_detector.track_court(backgroud_removed)
-
+        
             detection_model.player_1_boxes.append(player_1)
             detection_model.player_2_boxes.append(player_2)
 
             # ball_pos_center = center_of_box(ball_pos)
             ball_detector.detect_ball(court_detector.delete_extra_parts(frame))
-
-            # yolo_ball_pos.append(ball_pos_center)
 
             total_time += (time.time() - start_time)
             print('Processing frame %d/%d  FPS %04f' % (frame_i, length, frame_i / total_time), '\r', end='')
@@ -1510,14 +1462,18 @@ def analyize_tennis_game(video_path, my_bar, ind, total_seg, one_game_segment, c
     create_top_view(court_detector, detection_model, fps, tennis_tracking, volleyed)
 
     output_file = vid_name.split('/')[-1].split('.')[0] + '.mp4'
-    add_data_to_video(input_video='./output.mp4', court_detector=court_detector, players_detector=detection_model,
-                      ball_detector=ball_detector, strokes_predictions_1=predictions_1, strokes_predictions_2=predictions_2, skeleton_df=None,
-                      statistics=statistics,
-                      show_video=False, with_frame=1, output_folder='output', output_file=output_file,
-                      p1=player_1_strokes_indices, p2=player_2_strokes_indices, f_x=f2_x, f_y=f2_y)
+
+    my_bar.progress(int(completed), text=f'Saving Video {ind+1}/{total_seg}, Please wait...')
+
+
+    add_data_to_video(input_video='./output.mp4', court_detector=court_detector, players_detector=detection_model, strokes_predictions_1=predictions_1, strokes_predictions_2=predictions_2, skeleton_df=None,
+                      statistics=statistics, with_frame=1, output_folder='output', output_file=output_file,completed=completed, one_game_segment=one_game_segment, my_bar=my_bar, vid_ind=ind)
 
     # tennis_tracking = tennis_tracking[['Time','Frame','Player_Near_End_Pos','Player_Far_End_Pos','Ball_POS', 'Ball_bounced', 'Stroke_by', 'Stroke_Type','Ball_Bounce_Outcome']]
     tennis_tracking.to_excel(f"./CSV/{output_file.replace('.mp4', '.xlsx')}", index = False)
+
+    # completed = int(one_game_segment)
+    # my_bar.progress(int(completed), text=f'Saving Video Completed')
 
     
     
@@ -1586,7 +1542,7 @@ def find_game_in_video(vid_path, num_games = 1):
                             if len(game_frame_holder) > 30:
                     
                                 game_index.append([start_index, frame_i])
-                                out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
+                                out = cv2.VideoWriter(f'./game_output/game_play_{str(start_index).zfill(7)}_{str(frame_i).zfill(7)}.mp4',
                                     cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
 
                                 save_video(game_frame_holder, out)
@@ -1604,7 +1560,7 @@ def find_game_in_video(vid_path, num_games = 1):
                         if len(game_frame_holder) > 30:
                     
                             game_index.append([start_index, frame_i])
-                            out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
+                            out = cv2.VideoWriter(f'./game_output/game_play_{str(start_index).zfill(7)}_{str(frame_i).zfill(7)}.mp4',
                                 cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
 
                             save_video(game_frame_holder, out)
@@ -1616,15 +1572,12 @@ def find_game_in_video(vid_path, num_games = 1):
 
                         if game_play > num_games:
                             break
-
-
-
             # else:
-
+            #     print("Except, length of game frame holder", len(game_frame_holder))
             #     if len(game_frame_holder) > 30:
-                
+            
             #         game_index.append([start_index, frame_i])
-            #         out = cv2.VideoWriter(f'./game_output/game_play_{game_play}.mp4',
+            #         out = cv2.VideoWriter(f'./game_output/game_play_{str(start_index).zfill(7)}_{str(frame_i).zfill(7)}.mp4',
             #             cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), fps, (v_width, v_height))
 
             #         save_video(game_frame_holder, out)
@@ -1634,8 +1587,42 @@ def find_game_in_video(vid_path, num_games = 1):
             #     court_detection   = False
             #     temp_court.frame_points = None
 
+            #     if game_play > num_games:
+            #         break
 
             frame_i += 1
                     
         else:
             break
+
+    return fps
+
+
+def create_final_results(fps):
+    all_game_files = sorted(glob('./CSV/*.xlsx'))
+    tennis_tracking = pd.DataFrame(columns=["Time", "Frame", "Player_Near_End_Pos", "Player_Far_End_Pos", "Ball_POS", "Ball_bounced", "Stroke_by", "Stroke_Type", "Ball_predict_point"])
+
+    print(all_game_files)
+    for game_path in all_game_files:
+        try:
+            start_frame = int(game_path.split('_')[2].split('.')[0])
+            start_time  = start_frame / fps
+
+            temp = pd.read_excel(game_path)
+            temp[["Time"]]  = temp[["Time"]].apply(lambda x : x + start_time)
+            temp[["Frame"]] = temp[["Frame"]].apply(lambda x : x + start_frame)
+
+            tennis_tracking = pd.concat([tennis_tracking, temp], ignore_index=True)
+
+        except:
+            pass
+
+    
+    tennis_tracking.to_excel('./CSV/final.xlsx', index = False)
+
+
+if __name__=="__main__":
+
+    # download_vid_path = glob("./download/*.webm")[0]
+    # find_game_in_video(download_vid_path, 4)
+    create_final_results(30)

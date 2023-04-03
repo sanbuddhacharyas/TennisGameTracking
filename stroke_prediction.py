@@ -23,22 +23,28 @@ def get_stroke_predictions(video_path, stroke_model, strokes_frames, player_boxe
     # For each stroke detected trim video part and predict stroke
     for frame_num in strokes_frames:
         game_play = make_video_segment(video, frame_num, player_boxes)
-        imageio.mimsave(f'./GIF/{frame_num}.gif', game_play, fps=20)
-        game_play = frames_extraction(game_play)
-        game_play = np.array(game_play)[np.newaxis, ...]
-        
 
-        pred   = stroke_model.predict(game_play)[0]
-        cls_   = np.argmax(pred)
+        print("game_play", len(game_play))
+        if len(game_play)>20:
+            game_play = frames_extraction(game_play, SEQUENCE_LENGTH=20)
+            imageio.mimsave(f'./GIF/{frame_num}.gif', list((np.array(game_play)*255).astype(np.uint8)), fps=20)
+            game_play = np.array(game_play)[np.newaxis, ...]
+            
 
-        if cls_ == 0:
-            predictions[frame_num] = {'probs':pred, 'stroke': 'Backhand'}
-        
-        elif cls_ == 1:
-            predictions[frame_num] = {'probs':pred, 'stroke': 'Service/Smash'}
+            pred   = stroke_model.predict(game_play)[0]
+            cls_   = np.argmax(pred)
 
-        elif cls_ == 2:
-            predictions[frame_num] = {'probs':pred, 'stroke': 'Forehand'}
+            if cls_ == 0:
+                predictions[frame_num] = {'probs':pred, 'stroke': 'Backhand'}
+            
+            elif cls_ == 1:
+                predictions[frame_num] = {'probs':pred, 'stroke': 'Service/Smash'}
+
+            elif cls_ == 2:
+                predictions[frame_num] = {'probs':pred, 'stroke': 'Forehand'}
+
+        else:
+            predictions[frame_num] = {'probs':[], 'stroke': 'None'}
     
 
     return predictions
@@ -108,7 +114,7 @@ def frames_extraction(frames_tennis, SEQUENCE_LENGTH = 20, IMAGE_HEIGHT= 64, IMA
     '''
 
     # Declare a list to store video frames.
-    frames_list = []
+    frames_list   = []
 
     # Get the total number of frames in the video.
     video_frames_count = len(frames_tennis)
@@ -116,26 +122,58 @@ def frames_extraction(frames_tennis, SEQUENCE_LENGTH = 20, IMAGE_HEIGHT= 64, IMA
     # Calculate the the interval after which frames will be added to the list.
     skip_frames_window = max(int(video_frames_count/SEQUENCE_LENGTH), 1)
 
+    num_frame_to_add   = SEQUENCE_LENGTH - video_frames_count
+
+    if num_frame_to_add > 0:
+        add_frame_sequence = int(np.floor(SEQUENCE_LENGTH / num_frame_to_add))
+       
+
+    vid_counter = 0
     # Iterate through the Video Frames.
     for frame_counter in range(SEQUENCE_LENGTH):
 
-        # Reading the frame from the video. 
-        frame = frames_tennis[frame_counter * skip_frames_window]
+        if(num_frame_to_add<=0):
+            
+            frame = frames_tennis[frame_counter * skip_frames_window]
 
-        # Resize the Frame to fixed height and width.
-        resized_frame = cv2.resize(frame, (IMAGE_HEIGHT, IMAGE_WIDTH))
-        
-        # Normalize the resized frame by dividing it with 255 so that each pixel value then lies between 0 and 1
-        normalized_frame = resized_frame / 255
-        
-        # Append the normalized frame into the frames list
-        frames_list.append(normalized_frame)
+            # Resize the Frame to fixed height and width.
+            resized_frame = cv2.resize(frame, (IMAGE_HEIGHT, IMAGE_WIDTH))
+            
+            # Normalize the resized frame by dividing it with 255 so that each pixel value then lies between 0 and 1
+            normalized_frame = resized_frame / 255
+            
+            # Append the normalized frame into the frames list
+            frames_list.append(normalized_frame)
+
+
+        else:
+            if ((frame_counter+1)%add_frame_sequence)!=0:
+                    # # Set the current frame position of the video.
+                # video_reader.set(cv2.CAP_PROP_POS_FRAMES, frame_counter * skip_frames_window)
+
+                # Reading the frame from the video. 
+                frame = frames_tennis[vid_counter]
+
+                # Resize the Frame to fixed height and width.
+                resized_frame = cv2.resize(frame, (IMAGE_HEIGHT, IMAGE_WIDTH))
+                
+                # Normalize the resized frame by dividing it with 255 so that each pixel value then lies between 0 and 1
+                normalized_frame = resized_frame / 255
+                
+                # Append the normalized frame into the frames list
+                frames_list.append(normalized_frame)
+
+                vid_counter += 1
+
+            elif len(frames_list)>0:
+                frames_list.append(frames_list[-1])
     
     # Return the frames list.
     return frames_list
 
 if __name__ == '__main__':
     stroke_model = tf.keras.models.load_model('./checkpoints/stroke_classification.h5')
+    print(stroke_model.summary())
     print("Model_loaded")
     video_path  = './action_recognition_player/9J0GI0R000_1490_P2.gif'
     video       = cv2.VideoCapture(video_path)
@@ -149,7 +187,10 @@ if __name__ == '__main__':
         else:
             break
     
-    stroke_frames = np.array(frames_extraction(stroke_frames))[np.newaxis, ...]
+    print(len(stroke_frames))
+    stroke_frames = np.array(frames_extraction(stroke_frames, SEQUENCE_LENGTH=20))[np.newaxis, ...]
+
+    print(stroke_frames.shape)
 
     prediction    = stroke_model.predict(stroke_frames)[0]
     pred          = np.argmax(prediction)
